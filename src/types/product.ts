@@ -39,6 +39,9 @@ export interface StoredImage {
 }
 
 export interface GeneratedImage extends StoredImage {
+  /** Miniatura WebP (600 px) para tarjetas y carrito. */
+  thumbKey?: string;
+  thumbUrl?: string;
   type: GeneratedImageType;
   model: string;
   createdAt: number;
@@ -119,8 +122,10 @@ export interface CatalogItem {
   style: string;
   features: string[];
   availability: Availability;
-  /** URLs ordenadas: primero las generadas, después la original. */
+  /** URLs para el detalle: las generadas (o la original si aún no hay). */
   images: string[];
+  /** Miniaturas en el mismo orden que `images` (para tarjetas y carrito). */
+  thumbnails?: string[];
   createdAt: number;
   updatedAt: number;
 }

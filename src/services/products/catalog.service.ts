@@ -3,7 +3,8 @@ import { adminDb } from '../firebase/firebase-admin.service';
 import type { CatalogItem } from '../../types/product';
 
 function normalize(item: CatalogItem): CatalogItem {
-  return { ...item, colors: item.colors ?? [], features: item.features ?? [], images: item.images ?? [] };
+  const images = item.images ?? [];
+  return { ...item, colors: item.colors ?? [], features: item.features ?? [], images, thumbnails: item.thumbnails ?? images };
 }
 
 export async function listCatalog(): Promise<CatalogItem[]> {

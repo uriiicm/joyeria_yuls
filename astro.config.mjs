@@ -1,27 +1,14 @@
 // @ts-check
 import { defineConfig, envField } from 'astro/config';
-import vercel from '@astrojs/vercel';
-import { loadEnv } from 'vite';
-
-const env = loadEnv(process.env.NODE_ENV ?? 'development', process.cwd(), '');
-const r2Host = env.R2_PUBLIC_BASE_URL ? new URL(env.R2_PUBLIC_BASE_URL).hostname : undefined;
+import node from '@astrojs/node';
 
 export default defineConfig({
   // Por defecto todo se pre-renderiza (panel admin = HTML estático).
   // El catálogo público y los endpoints /api declaran `prerender = false`.
   output: 'static',
-  adapter: vercel({
-    imageService: true,
-    imagesConfig: {
-      sizes: [400, 800, 1200],
-      formats: ['image/avif', 'image/webp'],
-      domains: r2Host ? [r2Host] : [],
-    },
-    maxDuration: 60,
-  }),
-  image: {
-    domains: r2Host ? [r2Host] : [],
-  },
+  // Servidor Node independiente (Render, VPS o cualquier hosting con Node 22+).
+  // Escucha en HOST/PORT; Render define PORT automáticamente.
+  adapter: node({ mode: 'standalone' }),
   env: {
     schema: {
       PUBLIC_FIREBASE_API_KEY: envField.string({ context: 'client', access: 'public' }),

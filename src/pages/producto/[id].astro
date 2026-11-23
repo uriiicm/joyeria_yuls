@@ -6,7 +6,6 @@ import ProductGallery from '../../components/products/ProductGallery.astro';
 import { getCatalogItem } from '../../services/products/catalog.service';
 import { AVAILABILITY_LABEL, formatPrice } from '../../lib/utils/format';
 import { whatsappLink } from '../../lib/utils/whatsapp';
-import { optimizedImage } from '../../lib/utils/images';
 import Icon from '../../components/ui/Icon.astro';
 import AddedToCartModal from '../../components/catalog/AddedToCartModal.astro';
 import { PUBLIC_CURRENCY, PUBLIC_FREE_SHIPPING_MIN, PUBLIC_STORE_NAME } from 'astro:env/client';
@@ -27,7 +26,7 @@ const cartItem = {
   code: item.code,
   name: item.name,
   price: item.price,
-  image: item.images[0] ? optimizedImage(item.images[0], 400) : '/placeholder-jewelry.svg',
+  image: item.thumbnails?.[0] ?? item.images[0] ?? '/placeholder-jewelry.svg',
   url: new URL(`/producto/${item.id}`, Astro.url.origin).href,
 };
 const details = [
@@ -71,7 +70,7 @@ const jsonLd = {
     <a href="/#catalogo" class="back">← Volver al catálogo</a>
 
     <div class="product__layout">
-      <ProductGallery images={item.images} alt={item.name} />
+      <ProductGallery images={item.images} thumbnails={item.thumbnails} alt={item.name} />
 
       <section class="product__info fade-in">
         <p class="eyebrow">{item.category}</p>
