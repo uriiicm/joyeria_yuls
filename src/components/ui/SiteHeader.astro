@@ -1,5 +1,7 @@
 ---
 import { PUBLIC_STORE_NAME } from 'astro:env/client';
+import Icon from './Icon.astro';
+import CartDrawer from '../catalog/CartDrawer.astro';
 ---
 
 <header class="site-header">
@@ -9,9 +11,15 @@ import { PUBLIC_STORE_NAME } from 'astro:env/client';
     </a>
     <nav class="site-nav">
       <a href="/#catalogo">Catálogo</a>
+      <button class="cart-btn" type="button" data-cart-open aria-label="Abrir carrito">
+        <Icon name="cart" size={22} />
+        <span class="cart-btn__count" data-cart-count hidden>0</span>
+      </button>
     </nav>
   </div>
 </header>
+
+<CartDrawer />
 
 <style>
   .site-header {
@@ -31,6 +39,38 @@ import { PUBLIC_STORE_NAME } from 'astro:env/client';
   .brand img {
     height: 40px;
     width: auto;
+  }
+  .site-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .cart-btn {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--white-warm);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .cart-btn__count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--gold);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 500;
+    display: grid;
+    place-items: center;
   }
   .site-nav a {
     font-size: 0.82rem;

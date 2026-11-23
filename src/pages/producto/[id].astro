@@ -6,7 +6,10 @@ import ProductGallery from '../../components/products/ProductGallery.astro';
 import { getCatalogItem } from '../../services/products/catalog.service';
 import { AVAILABILITY_LABEL, formatPrice } from '../../lib/utils/format';
 import { whatsappLink } from '../../lib/utils/whatsapp';
-import { PUBLIC_CURRENCY, PUBLIC_STORE_NAME } from 'astro:env/client';
+import { optimizedImage } from '../../lib/utils/images';
+import Icon from '../../components/ui/Icon.astro';
+import AddedToCartModal from '../../components/catalog/AddedToCartModal.astro';
+import { PUBLIC_CURRENCY, PUBLIC_FREE_SHIPPING_MIN, PUBLIC_STORE_NAME } from 'astro:env/client';
 
 export const prerender = false;
 
@@ -18,6 +21,15 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
 
 const wa = whatsappLink(item);
 const soldOut = item.availability === 'sold_out';
+// Datos mínimos para el carrito del visitante (se guardan en su navegador).
+const cartItem = {
+  id: item.id,
+  code: item.code,
+  name: item.name,
+  price: item.price,
+  image: item.images[0] ? optimizedImage(item.images[0], 400) : '/placeholder-jewelry.svg',
+  url: new URL(`/producto/${item.id}`, Astro.url.origin).href,
+};
 const details = [
   ['Categoría', item.category],
   ['Material aparente', item.apparentMaterial],
@@ -93,12 +105,39 @@ const jsonLd = {
           )
         }
 
+        <div class="product__actions">
+          {
+            soldOut ? (
+              <button class="btn btn--block" type="button" disabled>
+                Agotado
+              </button>
+            ) : (
+              <button class="btn btn--whatsapp btn--block btn--buy" type="button" data-add-to-cart={JSON.stringify(cartItem)}>
+                <Icon name="cart" />
+                <span data-add-label>Agregar al carrito</span>
+              </button>
+            )
+          }
+          {
+            wa && (
+              <a class="btn btn--ghost btn--block" href={wa} target="_blank" rel="noopener">
+                <Icon name="whatsapp" />
+                {soldOut ? 'Preguntar si volverá a estar disponible' : 'Tengo una pregunta'}
+              </a>
+            )
+          }
+        </div>
         {
-          wa && (
-            <a class="btn btn--whatsapp btn--block" href={wa} target="_blank" rel="noopener">
-              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.4-.3Z"/></svg>
-              {soldOut ? 'Preguntar por WhatsApp' : 'Consultar por WhatsApp'}
-            </a>
+          !soldOut && (
+            <div class="urgency">
+              <p class="urgency__main">
+                <span class="urgency__dot" aria-hidden="true" />
+                <strong>Pieza única:</strong> solo hay una disponible. Cuando alguien la pide, sale del catálogo.
+              </p>
+              {PUBLIC_FREE_SHIPPING_MIN > 0 && (
+                <p class="urgency__ship">Envío gratis en pedidos desde {formatPrice(PUBLIC_FREE_SHIPPING_MIN)}.</p>
+              )}
+            </div>
           )
         }
         <p class="product__note muted">Las características se describen según la apariencia de la pieza.</p>
@@ -107,7 +146,31 @@ const jsonLd = {
   </main>
 
   <SiteFooter />
+  <AddedToCartModal />
 </BaseLayout>
+
+<script>
+  import { CART_EVENT, addToCart, isInCart, type CartItem } from '../../client/cart';
+
+  document.querySelectorAll<HTMLButtonElement>('[data-add-to-cart]').forEach((button) => {
+    const item = JSON.parse(button.dataset.addToCart!) as CartItem;
+    const label = button.querySelector<HTMLElement>('[data-add-label]')!;
+
+    // Si ya está en el carrito, el botón lo indica y abre el carrito.
+    const sync = () => {
+      const inCart = isInCart(item.id);
+      label.textContent = inCart ? 'En tu carrito · Ver carrito' : 'Agregar al carrito';
+      button.classList.toggle('is-in-cart', inCart);
+    };
+    sync();
+    window.addEventListener(CART_EVENT, sync);
+
+    button.addEventListener('click', () => {
+      if (addToCart(item)) window.dispatchEvent(new CustomEvent('cart:added', { detail: item }));
+      else window.dispatchEvent(new CustomEvent('cart:open'));
+    });
+  });
+</script>
 
 <style>
   .product {
@@ -186,6 +249,59 @@ const jsonLd = {
   }
   .product__features li::marker {
     color: var(--gold);
+  }
+  .product__actions {
+    display: grid;
+    gap: 0.6rem;
+    width: 100%;
+  }
+  .btn--buy {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+  .btn--buy.is-in-cart {
+    --bg: var(--white-warm);
+    --fg: #3f7156;
+    border-color: #bcd3c4;
+  }
+  .urgency {
+    width: 100%;
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: var(--radius-sm);
+    background: #fbf5ea;
+    border: 1px solid #f0e4cc;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  .urgency__main {
+    padding-left: 1.05rem;
+    position: relative;
+  }
+  .urgency__dot {
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 0 rgb(176 141 87 / 0.5);
+    animation: pulse 2s infinite;
+    transform: translateY(-1px);
+  }
+  @keyframes pulse {
+    70% {
+      box-shadow: 0 0 0 7px rgb(176 141 87 / 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgb(176 141 87 / 0);
+    }
+  }
+  .urgency__ship {
+    padding-left: 1.05rem;
+    color: var(--muted);
   }
   .product__note {
     font-size: 0.78rem;

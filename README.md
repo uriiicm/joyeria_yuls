@@ -251,6 +251,16 @@ Lo recomendable es generar 2 o 3 joyas reales con cada modelo y comparar la fide
 
 ---
 
+## 7.1 Carrito y pedidos por WhatsApp
+
+- Cada joya es una **pieza única**: en el detalle, **Agregar al carrito** la agrega una sola vez. Si ya está en el carrito, el botón cambia a "En tu carrito · Ver carrito".
+- Al agregar una joya aparece un aviso con dos mensajes: que es pieza única y cuánto falta para el **envío gratis**. El mínimo se configura con `PUBLIC_FREE_SHIPPING_MIN` (por defecto 500; con 0 se desactiva).
+- El detalle muestra un aviso real de urgencia: "Pieza única: solo hay una disponible".
+- El carrito no tiene cantidades. Cada pieza lleva la etiqueta "Pieza única" y un enlace para quitarla, y arriba hay una barra de progreso hacia el envío gratis.
+- El carrito vive solo en el navegador del cliente (`localStorage`, `src/client/cart.ts`). No guarda datos personales en el servidor ni procesa pagos.
+- **Realizar pedido** abre `wa.me/<PUBLIC_WHATSAPP_NUMBER>` con el pedido ya escrito: nombre, código, precio y enlace de cada pieza, el total y, si aplica, la nota de envío gratis. El cliente solo toca *Enviar*.
+- Las joyas agotadas no se pueden agregar.
+
 ## 8. Endpoints
 
 Todos los endpoints `/api/*` requieren `Authorization: Bearer <Firebase ID token>` de la administradora. Las respuestas de error tienen la forma `{ error, code }`.

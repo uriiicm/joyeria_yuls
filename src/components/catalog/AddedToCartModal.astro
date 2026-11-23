@@ -1,0 +1,219 @@
+---
+// Aviso que aparece al agregar una joya: confirma, recuerda que es pieza única
+// y muestra cuánto falta para el envío gratis.
+import Icon from '../ui/Icon.astro';
+---
+
+<div class="added" data-added hidden>
+  <div class="added__backdrop" data-added-close></div>
+  <div class="added__card" role="dialog" aria-modal="true" aria-labelledby="added-title">
+    <button class="added__x" type="button" data-added-close aria-label="Cerrar"><Icon name="close" size={20} /></button>
+
+    <div class="added__item">
+      <img data-added-img alt="" width="84" height="84" />
+      <div>
+        <p class="added__ok">✓ Agregada a tu carrito</p>
+        <h2 id="added-title" data-added-name></h2>
+        <p class="added__price" data-added-price></p>
+      </div>
+    </div>
+
+    <p class="added__unique">
+      <strong>Es una pieza única.</strong> Solo existe una; en cuanto alguien realiza su pedido, deja de estar disponible.
+    </p>
+
+    <div class="added__ship" data-added-ship>
+      <p data-added-ship-text></p>
+      <div class="added__bar"><span data-added-bar></span></div>
+    </div>
+
+    <div class="added__actions">
+      <a class="btn btn--whatsapp btn--block" href="#" data-added-checkout>
+        <Icon name="cart" /> Ver carrito y realizar pedido
+      </a>
+      <a class="btn btn--ghost btn--block" href="/#catalogo" data-added-continue>Seguir viendo joyas</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { FREE_SHIPPING_MIN, cartTotal, formatMoney, missingForFreeShipping, type CartItem } from '../../client/cart';
+
+  const root = document.querySelector<HTMLElement>('[data-added]')!;
+  const $ = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
+  let lastFocus: Element | null = null;
+
+  function open(item: CartItem) {
+    lastFocus = document.activeElement;
+    $<HTMLImageElement>('[data-added-img]').src = item.image;
+    $('[data-added-name]').textContent = item.name;
+    $('[data-added-price]').textContent = formatMoney(item.price);
+
+    const ship = $('[data-added-ship]');
+    ship.hidden = FREE_SHIPPING_MIN <= 0;
+    const missing = missingForFreeShipping();
+    $('[data-added-ship-text]').innerHTML =
+      missing > 0
+        ? `Agrega <b>${formatMoney(missing)}</b> más y tu <b>envío es gratis</b> (pedidos desde ${formatMoney(FREE_SHIPPING_MIN)}).`
+        : `¡Listo! Tu pedido de ${formatMoney(cartTotal())} ya tiene <b>envío gratis</b>. 🎉`;
+    ship.classList.toggle('is-complete', missing === 0);
+    $('[data-added-bar]').style.width = '0%';
+
+    root.hidden = false;
+    document.documentElement.classList.add('cart-open');
+    requestAnimationFrame(() => {
+      root.classList.add('is-open');
+      $('[data-added-bar]').style.width = `${Math.min(100, (cartTotal() / FREE_SHIPPING_MIN) * 100)}%`;
+    });
+    $('[data-added-checkout]').focus();
+  }
+
+  function close() {
+    root.classList.remove('is-open');
+    document.documentElement.classList.remove('cart-open');
+    setTimeout(() => (root.hidden = true), 200);
+    (lastFocus as HTMLElement | null)?.focus?.();
+  }
+
+  root.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('[data-added-close]')) close();
+  });
+  $('[data-added-checkout]').addEventListener('click', (e) => {
+    e.preventDefault();
+    close();
+    window.dispatchEvent(new CustomEvent('cart:open'));
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !root.hidden) close();
+  });
+  window.addEventListener('cart:added', (e) => open((e as CustomEvent<CartItem>).detail));
+</script>
+
+<style>
+  .added {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: end center;
+  }
+  @media (min-width: 640px) {
+    .added {
+      place-items: center;
+    }
+  }
+  .added__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgb(61 53 49 / 0.35);
+    opacity: 0;
+    transition: opacity 0.2s var(--ease);
+  }
+  .added__card {
+    position: relative;
+    width: min(440px, 100%);
+    max-height: 100dvh;
+    overflow-y: auto;
+    display: grid;
+    gap: 1rem;
+    padding: 1.5rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+    background: var(--white-warm);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(24px);
+    opacity: 0;
+    transition:
+      transform 0.25s var(--ease),
+      opacity 0.2s var(--ease);
+  }
+  @media (min-width: 640px) {
+    .added__card {
+      border-radius: var(--radius-lg);
+    }
+  }
+  .added.is-open .added__backdrop {
+    opacity: 1;
+  }
+  .added.is-open .added__card {
+    transform: none;
+    opacity: 1;
+  }
+  .added__x {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 0.3rem;
+    cursor: pointer;
+  }
+  .added__item {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 0.9rem;
+    align-items: center;
+    padding-right: 1.5rem;
+  }
+  .added__item img {
+    width: 84px;
+    height: 84px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--beige-100);
+  }
+  .added__ok {
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    color: var(--success);
+    font-weight: 500;
+  }
+  .added__item h2 {
+    font-size: 1.35rem;
+  }
+  .added__price {
+    color: var(--ink-soft);
+  }
+  .added__unique {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    padding: 0.75rem 0.85rem;
+    border-left: 3px solid var(--gold-soft);
+    background: #fbf5ea;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .added__ship {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.92rem;
+    padding: 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--rose-50);
+    border: 1px solid var(--rose-100);
+  }
+  .added__ship.is-complete {
+    background: #eef4ef;
+    border-color: #dbe8de;
+  }
+  .added__bar {
+    height: 7px;
+    border-radius: 999px;
+    background: var(--beige-200);
+    overflow: hidden;
+  }
+  .added__bar span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--rose-400), var(--gold));
+    transition: width 0.7s var(--ease) 0.15s;
+  }
+  .added__ship.is-complete .added__bar span {
+    background: var(--success);
+  }
+  .added__actions {
+    display: grid;
+    gap: 0.6rem;
+  }
+</style>

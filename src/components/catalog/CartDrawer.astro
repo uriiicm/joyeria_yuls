@@ -1,0 +1,347 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div class="cart" data-cart hidden>
+  <div class="cart__backdrop" data-cart-close></div>
+  <aside class="cart__panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+    <header class="cart__head">
+      <h2 id="cart-title">Tu carrito</h2>
+      <button class="cart__icon-btn" type="button" data-cart-close aria-label="Cerrar carrito">
+        <Icon name="close" size={22} />
+      </button>
+    </header>
+
+    <div class="cart__body">
+      <div class="shipping" data-shipping hidden>
+        <p data-shipping-text></p>
+        <div class="shipping__bar"><span data-shipping-bar></span></div>
+      </div>
+      <ul class="cart__list" data-cart-list></ul>
+      <div class="cart__empty" data-cart-empty>
+        <Icon name="cart" size={36} />
+        <p>Tu carrito está vacío.</p>
+        <button class="btn btn--ghost btn--sm" type="button" data-cart-close>Ver catálogo</button>
+      </div>
+    </div>
+
+    <footer class="cart__foot" data-cart-foot>
+      <div class="cart__total">
+        <span>Total</span>
+        <strong data-cart-total></strong>
+      </div>
+      <p class="cart__hint">Se abrirá WhatsApp con tu pedido listo; solo toca <b>Enviar</b>. La vendedora te confirmará disponibilidad y forma de pago.</p>
+      <a class="btn btn--whatsapp btn--block cart__order" data-cart-order target="_blank" rel="noopener">
+        <Icon name="whatsapp" />
+        Realizar pedido
+      </a>
+      <button class="cart__clear" type="button" data-cart-clear>Vaciar carrito</button>
+    </footer>
+  </aside>
+</div>
+
+<script>
+  import {
+    CART_EVENT,
+    FREE_SHIPPING_MIN,
+    cartCount,
+    cartTotal,
+    clearCart,
+    currentCart,
+    formatMoney,
+    missingForFreeShipping,
+    orderLink,
+    removeFromCart,
+  } from '../../client/cart';
+
+  const root = document.querySelector<HTMLElement>('[data-cart]')!;
+  const list = root.querySelector<HTMLUListElement>('[data-cart-list]')!;
+  const empty = root.querySelector<HTMLElement>('[data-cart-empty]')!;
+  const foot = root.querySelector<HTMLElement>('[data-cart-foot]')!;
+  const total = root.querySelector<HTMLElement>('[data-cart-total]')!;
+  const order = root.querySelector<HTMLAnchorElement>('[data-cart-order]')!;
+  const shipping = root.querySelector<HTMLElement>('[data-shipping]')!;
+  const shippingText = root.querySelector<HTMLElement>('[data-shipping-text]')!;
+  const shippingBar = root.querySelector<HTMLElement>('[data-shipping-bar]')!;
+  let lastFocus: Element | null = null;
+
+  const esc = (v: string) =>
+    v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+  function render() {
+    const items = currentCart();
+    list.innerHTML = items
+      .map(
+        (i) => `
+        <li class="cart__item">
+          <a href="${esc(i.url)}"><img src="${esc(i.image)}" alt="" width="72" height="72" onerror="this.src='/placeholder-jewelry.svg'" /></a>
+          <div class="cart__info">
+            <a class="cart__name" href="${esc(i.url)}">${esc(i.name)}</a>
+            <span class="cart__code">${esc(i.code)}</span>
+            <span class="cart__price">${formatMoney(i.price)}</span>
+          </div>
+          <div class="cart__side">
+            <span class="cart__unique">Pieza única</span>
+            <button type="button" class="cart__remove" data-remove="${esc(i.id)}" aria-label="Quitar ${esc(i.name)} del carrito">Quitar</button>
+          </div>
+        </li>`,
+      )
+      .join('');
+    empty.hidden = items.length > 0;
+    foot.hidden = items.length === 0;
+    total.textContent = formatMoney(cartTotal(items));
+    order.href = orderLink(items) ?? '#';
+
+    // Progreso hacia el envío gratis.
+    shipping.hidden = FREE_SHIPPING_MIN <= 0 || items.length === 0;
+    const missing = missingForFreeShipping(items);
+    shippingText.innerHTML = missing > 0
+      ? `Te faltan <b>${formatMoney(missing)}</b> para el <b>envío gratis</b>.`
+      : '¡Tu pedido tiene <b>envío gratis</b>! 🎉';
+    shippingBar.style.width = `${Math.min(100, (cartTotal(items) / FREE_SHIPPING_MIN) * 100)}%`;
+    shipping.classList.toggle('is-complete', missing === 0);
+
+    const count = cartCount(items);
+    document.querySelectorAll<HTMLElement>('[data-cart-count]').forEach((el) => {
+      el.textContent = String(count);
+      el.hidden = count === 0;
+    });
+  }
+
+  function open() {
+    lastFocus = document.activeElement;
+    render();
+    root.hidden = false;
+    document.documentElement.classList.add('cart-open');
+    requestAnimationFrame(() => root.classList.add('is-open'));
+    root.querySelector<HTMLElement>('[data-cart-close].cart__icon-btn')?.focus();
+  }
+
+  function close() {
+    root.classList.remove('is-open');
+    document.documentElement.classList.remove('cart-open');
+    setTimeout(() => (root.hidden = true), 250);
+    (lastFocus as HTMLElement | null)?.focus?.();
+  }
+
+  root.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const removeBtn = target.closest<HTMLButtonElement>('[data-remove]');
+    if (removeBtn) {
+      removeFromCart(removeBtn.dataset.remove!);
+      return;
+    }
+    if (target.closest('[data-cart-close]')) close();
+  });
+  root.querySelector('[data-cart-clear]')!.addEventListener('click', () => {
+    if (confirm('¿Vaciar el carrito?')) clearCart();
+  });
+  order.addEventListener('click', (e) => {
+    if (!currentCart().length) e.preventDefault();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !root.hidden) close();
+  });
+  document.querySelectorAll('[data-cart-open]').forEach((b) => b.addEventListener('click', open));
+  window.addEventListener('cart:open', open);
+  window.addEventListener(CART_EVENT, render);
+  render();
+</script>
+
+<style>
+  .cart {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+  .cart__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgb(61 53 49 / 0.35);
+    opacity: 0;
+    transition: opacity 0.25s var(--ease);
+  }
+  .cart__panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(420px, 100%);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    background: var(--white-warm);
+    box-shadow: var(--shadow-lg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(100%);
+    transition: transform 0.25s var(--ease);
+  }
+  .cart.is-open .cart__backdrop {
+    opacity: 1;
+  }
+  .cart.is-open .cart__panel {
+    transform: none;
+  }
+  :global(html.cart-open) {
+    overflow: hidden;
+  }
+  .cart__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .cart__head h2 {
+    font-size: 1.6rem;
+  }
+  .cart__icon-btn {
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    padding: 0.35rem;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .cart__body {
+    overflow-y: auto;
+    min-height: 120px;
+    padding: 0.5rem 1.25rem;
+  }
+  .cart__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .cart__list :global(.cart__item) {
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .cart__list :global(img) {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--beige-100);
+  }
+  .cart__list :global(.cart__info) {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .cart__list :global(.cart__name) {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    line-height: 1.2;
+  }
+  .cart__list :global(.cart__code) {
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+  .cart__list :global(.cart__price) {
+    font-size: 0.92rem;
+  }
+  .cart__list :global(.cart__side) {
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+  }
+  .cart__list :global(.cart__unique) {
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    background: #f6eedf;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .cart__list :global(.cart__remove) {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0.2rem 0;
+  }
+  .shipping {
+    margin: 0.5rem 0 0.25rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--rose-50);
+    border: 1px solid var(--rose-100);
+    font-size: 0.88rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .shipping.is-complete {
+    background: #eef4ef;
+    border-color: #dbe8de;
+  }
+  .shipping__bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--beige-200);
+    overflow: hidden;
+  }
+  .shipping__bar span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--rose-400), var(--gold));
+    transition: width 0.5s var(--ease);
+  }
+  .shipping.is-complete .shipping__bar span {
+    background: var(--success);
+  }
+  .cart__empty {
+    display: grid;
+    justify-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .cart__foot {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--cream);
+  }
+  .cart__total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 1.05rem;
+  }
+  .cart__total strong {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 500;
+  }
+  .cart__hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .cart__order {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+  .cart__clear {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.82rem;
+    text-decoration: underline;
+    cursor: pointer;
+    justify-self: center;
+  }
+</style>
