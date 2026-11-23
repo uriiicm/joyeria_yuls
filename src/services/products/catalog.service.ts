@@ -4,7 +4,17 @@ import type { CatalogItem } from '../../types/product';
 
 function normalize(item: CatalogItem): CatalogItem {
   const images = item.images ?? [];
-  return { ...item, colors: item.colors ?? [], features: item.features ?? [], images, thumbnails: item.thumbnails ?? images };
+  return {
+    ...item,
+    description: item.description ?? '',
+    apparentMaterial: item.apparentMaterial ?? '',
+    colors: item.colors ?? [],
+    stone: item.stone ?? null,
+    style: item.style ?? '',
+    features: item.features ?? [],
+    images,
+    thumbnails: item.thumbnails ?? images,
+  };
 }
 
 export async function listCatalog(): Promise<CatalogItem[]> {
