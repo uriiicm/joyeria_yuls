@@ -1,0 +1,506 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { CATEGORIES } from '../../../types/product';
+---
+
+<AdminLayout title="Editar joya" active="products">
+  <a href="/admin/products" class="back muted">← Joyas</a>
+
+  <div data-missing hidden class="empty-state">Esta joya no existe o fue eliminada.</div>
+
+  <div class="editor" data-editor hidden>
+    <header class="editor__head">
+      <div>
+        <p class="eyebrow" data-code></p>
+        <h1 class="page-title" data-title>Joya</h1>
+      </div>
+      <span class="badge" data-status-badge></span>
+    </header>
+
+    <!-- Imágenes -->
+    <section class="section">
+      <div class="images">
+        <figure class="img card">
+          <img data-img="original" alt="Fotografía original" />
+          <figcaption>Original</figcaption>
+        </figure>
+        <figure class="img card">
+          <img data-img="product" alt="Imagen de producto generada" hidden />
+          <div class="img__empty" data-empty="product"></div>
+          <figcaption>Producto · IA</figcaption>
+        </figure>
+        <figure class="img card">
+          <img data-img="lifestyle" alt="Imagen lifestyle generada" hidden />
+          <div class="img__empty" data-empty="lifestyle"></div>
+          <figcaption>Lifestyle · IA</figcaption>
+        </figure>
+      </div>
+
+      <div class="gen card">
+        <p data-gen-status class="gen__status"></p>
+        <p data-gen-meta class="muted gen__meta"></p>
+        <p data-gen-estimate class="gen__estimate" hidden></p>
+        <div class="gen__actions">
+          <button class="btn btn--ghost btn--sm" type="button" data-estimate>Generar imágenes con IA</button>
+          <button class="btn btn--gold btn--sm" type="button" data-generate hidden>Confirmar y generar</button>
+          <button class="btn btn--ghost btn--sm" type="button" data-cancel-generate hidden>Cancelar</button>
+          <button class="btn btn--ghost btn--sm" type="button" data-retry-failed hidden>Reintentar fallidas</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Análisis -->
+    <div class="notice card" data-analysis-notice hidden>
+      <p data-analysis-text></p>
+      <button class="btn btn--ghost btn--sm" type="button" data-reanalyze>Analizar con IA</button>
+    </div>
+
+    <!-- Datos -->
+    <form class="section form" data-form novalidate>
+      <h2>Datos de la joya</h2>
+      <p class="muted small" data-ai-hint hidden>Sugerido por IA a partir de la foto. Revisa y corrige lo que necesites.</p>
+
+      <label class="field price">
+        <span>Precio en MXN (obligatorio para publicar)</span>
+        <input class="input" name="price" type="number" inputmode="decimal" min="1" step="0.01" placeholder="Ej. 350" autocomplete="off" />
+      </label>
+      <label class="field"><span>Nombre *</span><input class="input" name="name" maxlength="120" /></label>
+      <div class="two">
+        <label class="field">
+          <span>Categoría</span>
+          <select class="input" name="category">{CATEGORIES.map((c) => <option value={c}>{c}</option>)}</select>
+        </label>
+        <label class="field">
+          <span>Disponibilidad</span>
+          <select class="input" name="availability">
+            <option value="available">Disponible</option>
+            <option value="sold_out">Agotado</option>
+          </select>
+        </label>
+      </div>
+      <label class="field"><span>Descripción</span><textarea class="input" name="description" maxlength="1200"></textarea></label>
+      <label class="field"><span>Material aparente</span><input class="input" name="apparentMaterial" maxlength="120" placeholder="Metal de apariencia dorada" /></label>
+      <div class="two">
+        <label class="field"><span>Colores (separados por coma)</span><input class="input" name="colors" /></label>
+        <label class="field"><span>Piedra o detalle</span><input class="input" name="stone" maxlength="160" /></label>
+      </div>
+      <div class="two">
+        <label class="field"><span>Estilo</span><input class="input" name="style" maxlength="80" /></label>
+        <label class="field"><span>Forma</span><input class="input" name="shape" maxlength="120" /></label>
+      </div>
+      <label class="field"><span>Características (una por línea)</span><textarea class="input" name="features" rows="3"></textarea></label>
+
+      <p class="form__error" data-form-error role="alert" hidden></p>
+
+      <div class="actions">
+        <button class="btn btn--ghost" type="submit" data-save>Guardar</button>
+        <button class="btn" type="button" data-publish>Guardar y publicar</button>
+      </div>
+      <div class="actions actions--secondary">
+        <a class="btn btn--ghost btn--sm" data-view target="_blank" rel="noopener" hidden>Ver en catálogo</a>
+        <button class="btn btn--ghost btn--sm" type="button" data-unpublish hidden>Ocultar del catálogo</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-archive>Archivar</button>
+        <button class="btn btn--danger btn--sm" type="button" data-delete>Eliminar</button>
+      </div>
+    </form>
+  </div>
+</AdminLayout>
+
+<script>
+  import { api, requireAdminSession } from '../../../client/admin-session';
+  import { GENERATION_LABEL, STATUS_LABEL, subscribeProduct } from '../../../client/products';
+  import { busy, sleep, toast } from '../../../client/ui';
+  import type { GeneratedImageType, Product, ProductStatus } from '../../../types/product';
+
+  await requireAdminSession();
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id') ?? '';
+  const form = $<HTMLFormElement>('[data-form]');
+  const field = <T extends HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(n: string) =>
+    form.elements.namedItem(n) as T;
+
+  let product: Product | null = null;
+  let formFilled = false;
+  let dirty = false;
+  form.addEventListener('input', () => (dirty = true));
+
+  if (params.get('analysis') === 'failed') toast(params.get('msg') || 'El análisis falló. Puedes reintentarlo.', 'error', 7000);
+  if (params.get('new') === '1') history.replaceState(null, '', `?id=${encodeURIComponent(id)}`);
+
+  function fillForm(p: Product) {
+    field<HTMLInputElement>('price').value = p.price === null ? '' : String(p.price);
+    field<HTMLInputElement>('name').value = p.name;
+    field<HTMLSelectElement>('category').value = p.category;
+    field<HTMLSelectElement>('availability').value = p.availability;
+    field<HTMLTextAreaElement>('description').value = p.description;
+    field<HTMLInputElement>('apparentMaterial').value = p.apparentMaterial;
+    field<HTMLInputElement>('colors').value = p.colors.join(', ');
+    field<HTMLInputElement>('stone').value = p.stone ?? '';
+    field<HTMLInputElement>('style').value = p.style;
+    field<HTMLInputElement>('shape').value = p.shape;
+    field<HTMLTextAreaElement>('features').value = p.features.join('\n');
+    dirty = false;
+  }
+
+  function readForm() {
+    const v = (n: string) => field<HTMLInputElement>(n).value.trim();
+    return {
+      price: v('price') === '' ? null : Number(v('price')),
+      name: v('name'),
+      category: v('category'),
+      availability: v('availability'),
+      description: v('description'),
+      apparentMaterial: v('apparentMaterial'),
+      colors: v('colors').split(',').map((s) => s.trim()).filter(Boolean),
+      stone: v('stone') || null,
+      style: v('style'),
+      shape: v('shape'),
+      features: field<HTMLTextAreaElement>('features').value.split('\n').map((s) => s.trim()).filter(Boolean),
+    };
+  }
+
+  const fmtDate = (ts?: number | null) =>
+    ts ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(ts) : '';
+
+  function render(p: Product) {
+    $('[data-code]').textContent = p.code;
+    $('[data-title]').textContent = p.name || 'Nueva joya';
+    const badge = $('[data-status-badge]');
+    badge.className = `badge badge--${p.status}`;
+    badge.textContent = STATUS_LABEL[p.status];
+
+    $<HTMLImageElement>('[data-img="original"]').src = p.images.original?.url ?? '/placeholder-jewelry.svg';
+    for (const type of ['product', 'lifestyle'] as GeneratedImageType[]) {
+      const img = $<HTMLImageElement>(`[data-img="${type}"]`);
+      const empty = $(`[data-empty="${type}"]`);
+      const url = p.images.generated?.[type]?.url;
+      const job = p.ai.generationJobs?.[type];
+      img.hidden = !url;
+      if (url && img.src !== url) img.src = url;
+      empty.hidden = Boolean(url);
+      empty.innerHTML =
+        job && (job.status === 'queued' || job.status === 'in_progress')
+          ? '<span class="spinner"></span>'
+          : job && job.status !== 'completed'
+            ? '<span class="err">✕</span>'
+            : '';
+    }
+
+    // Estado de generación
+    const jobs = p.ai.generationJobs ?? {};
+    const done = (['product', 'lifestyle'] as const).filter((t) => jobs[t]?.status === 'completed').length;
+    const statusText =
+      p.ai.generationStatus === 'generating'
+        ? `Generando imagen ${Math.min(done + 1, 2)} de 2…`
+        : p.ai.generationStatus === 'failed'
+          ? `Error al generar: ${Object.values(jobs).find((j) => j?.error)?.error ?? 'intenta de nuevo'}`
+          : GENERATION_LABEL[p.ai.generationStatus];
+    $('[data-gen-status]').textContent = statusText;
+    const model = Object.values(jobs)[0]?.model;
+    const cost = Object.values(jobs).reduce((s, j) => s + Number(j?.estimatedCostUsd ?? 0), 0);
+    $('[data-gen-meta]').textContent = [
+      p.ai.lastGeneratedAt && `Generadas el ${fmtDate(p.ai.lastGeneratedAt)}`,
+      model && `Modelo: ${model}`,
+      cost > 0 && `Costo estimado: US$ ${cost.toFixed(3)}`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const generating = p.ai.generationStatus === 'generating';
+    $<HTMLButtonElement>('[data-estimate]').hidden = generating;
+    $('[data-estimate]').textContent = p.ai.generationStatus === 'idle' ? 'Generar imágenes con IA' : 'Volver a generar';
+    $('[data-retry-failed]').hidden = p.ai.generationStatus !== 'failed';
+    if (generating) hideConfirm();
+
+    // Análisis
+    const notice = $('[data-analysis-notice]');
+    const a = p.ai.analysisStatus;
+    notice.hidden = a === 'completed';
+    $('[data-analysis-text]').textContent =
+      a === 'analyzing' ? 'Analizando la fotografía…' : a === 'failed' ? `El análisis falló: ${p.ai.analysisError ?? ''}` : 'La foto aún no se ha analizado.';
+    $<HTMLButtonElement>('[data-reanalyze]').hidden = a === 'analyzing';
+    $('[data-ai-hint]').hidden = a !== 'completed';
+
+    // Acciones
+    const view = $<HTMLAnchorElement>('[data-view]');
+    view.hidden = p.status !== 'published';
+    view.href = `/producto/${p.id}`;
+    $('[data-unpublish]').hidden = p.status !== 'published';
+    $('[data-publish]').textContent = p.status === 'published' ? 'Guardar cambios' : 'Guardar y publicar';
+    $('[data-archive]').textContent = p.status === 'archived' ? 'Restaurar como borrador' : 'Archivar';
+
+    if (!formFilled || !dirty) {
+      fillForm(p);
+      formFilled = true;
+    }
+  }
+
+  subscribeProduct(
+    id,
+    (p) => {
+      product = p;
+      $('[data-missing]').hidden = Boolean(p);
+      $('[data-editor]').hidden = !p;
+      if (p) render(p);
+    },
+    () => toast('No se pudo cargar la joya.', 'error'),
+  );
+
+  // ---------- Guardar / publicar ----------
+  const formError = $('[data-form-error]');
+  async function save(status?: ProductStatus) {
+    formError.hidden = true;
+    const data = readForm();
+    if (!data.name) throw new Error('Escribe un nombre.');
+    const priceInput = field<HTMLInputElement>('price');
+    if (!priceInput.validity.valid || (data.price !== null && !(data.price > 0))) {
+      priceInput.focus();
+      throw new Error('El precio debe ser un número mayor a 0.');
+    }
+    if (status === 'published' && data.price === null) {
+      priceInput.focus();
+      throw new Error('Asigna un precio antes de publicar.');
+    }
+    await api(`/api/products/${id}`, { method: 'PATCH', body: JSON.stringify({ ...data, ...(status ? { status } : {}) }) });
+    dirty = false;
+  }
+  const withErrors = (btn: HTMLButtonElement, fn: () => Promise<void>, ok: string) =>
+    busy(btn, fn)
+      .then(() => toast(ok, 'success'))
+      .catch((err: Error) => {
+        if (err.message === 'busy') return;
+        formError.textContent = err.message;
+        formError.hidden = false;
+      });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    withErrors($('[data-save]'), () => save(), 'Cambios guardados.');
+  });
+  $('[data-publish]').addEventListener('click', (e) =>
+    withErrors(e.currentTarget as HTMLButtonElement, () => save('published'), 'Publicada en el catálogo.'),
+  );
+  $('[data-unpublish]').addEventListener('click', (e) =>
+    withErrors(e.currentTarget as HTMLButtonElement, () => save('draft'), 'Oculta del catálogo.'),
+  );
+  $('[data-archive]').addEventListener('click', (e) =>
+    withErrors(
+      e.currentTarget as HTMLButtonElement,
+      () => save(product?.status === 'archived' ? 'draft' : 'archived'),
+      product?.status === 'archived' ? 'Restaurada.' : 'Archivada.',
+    ),
+  );
+  $('[data-delete]').addEventListener('click', (e) => {
+    if (!confirm('¿Eliminar esta joya y todas sus fotos? Esta acción no se puede deshacer.')) return;
+    busy(e.currentTarget as HTMLButtonElement, async () => {
+      await api(`/api/products/${id}`, { method: 'DELETE' });
+      location.replace('/admin/products');
+    }).catch((err: Error) => err.message !== 'busy' && toast(err.message, 'error'));
+  });
+
+  // ---------- Análisis ----------
+  $('[data-reanalyze]').addEventListener('click', (e) =>
+    busy(e.currentTarget as HTMLButtonElement, async () => {
+      await api('/api/ai/analyze-jewelry', { method: 'POST', body: JSON.stringify({ productId: id }) });
+      dirty = false; // mostrar las sugerencias nuevas en el formulario
+    })
+      .then(() => toast('Análisis completado.', 'success'))
+      .catch((err: Error) => err.message !== 'busy' && toast(err.message, 'error', 7000)),
+  );
+
+  // ---------- Generación de imágenes ----------
+  let pendingTypes: GeneratedImageType[] | undefined;
+  const estimateEl = $('[data-gen-estimate]');
+  const generateBtn = $<HTMLButtonElement>('[data-generate]');
+
+  async function estimate(types?: GeneratedImageType[]) {
+    pendingTypes = types;
+    const { estimate } = await api<{ estimate: { totalUsd: string; model: string; types: string[] } }>(
+      '/api/ai/generate-jewelry-images',
+      { method: 'POST', body: JSON.stringify({ productId: id, types, estimateOnly: true }) },
+    );
+    estimateEl.textContent = `${estimate.types.length} ${estimate.types.length === 1 ? 'imagen' : 'imágenes'} con ${estimate.model}. Costo estimado: US$ ${Number(estimate.totalUsd).toFixed(3)}.`;
+    estimateEl.hidden = false;
+    generateBtn.hidden = false;
+    cancelBtn.hidden = false;
+    generateBtn.focus();
+  }
+
+  const cancelBtn = $<HTMLButtonElement>('[data-cancel-generate]');
+  function hideConfirm() {
+    estimateEl.hidden = true;
+    generateBtn.hidden = true;
+    cancelBtn.hidden = true;
+    pendingTypes = undefined;
+  }
+  cancelBtn.addEventListener('click', hideConfirm);
+
+  $('[data-estimate]').addEventListener('click', (e) =>
+    busy(e.currentTarget as HTMLButtonElement, () => estimate()).catch((err: Error) => err.message !== 'busy' && toast(err.message, 'error', 7000)),
+  );
+  $('[data-retry-failed]').addEventListener('click', (e) => {
+    const failed = (['product', 'lifestyle'] as const).filter((t) => product?.ai.generationJobs?.[t]?.status !== 'completed');
+    busy(e.currentTarget as HTMLButtonElement, () => estimate(failed)).catch((err: Error) => err.message !== 'busy' && toast(err.message, 'error', 7000));
+  });
+
+  generateBtn.addEventListener('click', () =>
+    busy(generateBtn, async () => {
+      const res = await api<{ jobs: Record<string, { status: string; error: string | null }> }>('/api/ai/generate-jewelry-images', {
+        method: 'POST',
+        body: JSON.stringify({ productId: id, types: pendingTypes }),
+      });
+      hideConfirm();
+      const failed = Object.values(res.jobs).filter((j) => j.status === 'failed');
+      if (failed.length) toast(`Higgsfield rechazó ${failed.length} solicitud(es): ${failed[0]!.error}`, 'error', 9000);
+      else toast('Solicitudes enviadas a Higgsfield. Generando…', 'success');
+      poll();
+    }).catch((err: Error) => err.message !== 'busy' && toast(err.message, 'error', 7000)),
+  );
+
+  // Polling secuencial mientras haya trabajos en curso (máx. 15 min por sesión de página).
+  let polling = false;
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    const deadline = Date.now() + 15 * 60_000;
+    let delay = 4000;
+    try {
+      while (Date.now() < deadline) {
+        await sleep(delay);
+        const s = await api<{ generationStatus: string }>(`/api/ai/generation-status?productId=${encodeURIComponent(id)}`).catch(
+          () => ({ generationStatus: 'generating' }),
+        );
+        if (s.generationStatus !== 'generating') {
+          if (s.generationStatus === 'completed') toast('Imágenes listas.', 'success');
+          break;
+        }
+        delay = Math.min(delay * 1.3, 10_000);
+      }
+    } finally {
+      polling = false;
+    }
+  }
+
+  // Si se abre la ficha con una generación en curso, retomar el seguimiento.
+  const waitFirst = setInterval(() => {
+    if (!product) return;
+    clearInterval(waitFirst);
+    if (product.ai.generationStatus === 'generating') poll();
+  }, 200);
+</script>
+
+<style>
+  .back {
+    display: inline-block;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .editor__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .images {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+  }
+  .img {
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .img img,
+  .img__empty {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: var(--beige-100);
+  }
+  .img__empty {
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .img__empty[hidden] {
+    display: none;
+  }
+  .img__empty .err {
+    color: var(--danger);
+  }
+  .img figcaption {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.4rem 0.5rem;
+  }
+  .gen {
+    margin-top: 0.75rem;
+    padding: 0.9rem 1rem;
+    display: grid;
+    gap: 0.4rem;
+  }
+  .gen__status {
+    font-weight: 500;
+  }
+  .gen__meta {
+    font-size: 0.78rem;
+  }
+  .gen__estimate {
+    font-size: 0.9rem;
+    background: var(--rose-50);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.7rem;
+  }
+  .gen__actions,
+  .actions--secondary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .notice {
+    margin-top: 1rem;
+    padding: 0.9rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--rose-50);
+  }
+  .form {
+    display: grid;
+    gap: 0.9rem;
+  }
+  .form h2 {
+    margin-bottom: 0;
+  }
+  .small {
+    font-size: 0.85rem;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  @media (max-width: 480px) {
+    .two {
+      grid-template-columns: 1fr;
+    }
+  }
+  .price .input {
+    font-size: 1.35rem;
+    font-family: var(--font-display);
+  }
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .form__error {
+    color: var(--danger);
+  }
+</style>

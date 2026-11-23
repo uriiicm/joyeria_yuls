@@ -1,0 +1,37 @@
+---
+import { PUBLIC_STORE_NAME } from 'astro:env/client';
+import { whatsappContactLink } from '../../lib/utils/whatsapp';
+const wa = whatsappContactLink();
+const year = new Date().getFullYear();
+---
+
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <img class="site-footer__logo" src="/logo.webp" alt={PUBLIC_STORE_NAME} width="900" height="262" loading="lazy" />
+    {wa && <a class="btn btn--ghost btn--sm" href={wa} target="_blank" rel="noopener">Escríbenos por WhatsApp</a>}
+    <p class="muted small">© {year} {PUBLIC_STORE_NAME}. Las características descritas corresponden a la apariencia de cada pieza.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 5rem;
+    border-top: 1px solid var(--line);
+    background: var(--beige-100);
+  }
+  .site-footer__inner {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding-block: 2.5rem 3rem;
+  }
+  .site-footer__logo {
+    width: min(240px, 60vw);
+    height: auto;
+  }
+  .small {
+    font-size: 0.8rem;
+    max-width: 46ch;
+  }
+</style>

@@ -1,0 +1,135 @@
+---
+import type { CatalogItem } from '../../types/product';
+import { AVAILABILITY_LABEL, formatPrice } from '../../lib/utils/format';
+import { FALLBACK_IMAGE, imageSrcSet, optimizedImage } from '../../lib/utils/images';
+
+interface Props {
+  item: CatalogItem;
+  eager?: boolean;
+}
+const { item, eager = false } = Astro.props;
+const cover = item.images[0];
+const search = [item.name, item.code, item.category, item.apparentMaterial, item.style, ...item.colors]
+  .join(' ')
+  .toLowerCase();
+---
+
+<article
+  class="product-card fade-in"
+  data-product
+  data-category={item.category}
+  data-availability={item.availability}
+  data-price={item.price}
+  data-created={item.createdAt}
+  data-search={search}
+>
+  <a href={`/producto/${item.id}`} class="product-card__link">
+    <div class="product-card__media">
+      <img
+        src={cover ? optimizedImage(cover, 800) : FALLBACK_IMAGE}
+        srcset={cover ? imageSrcSet(cover) : undefined}
+        sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+        alt={item.name}
+        loading={eager ? 'eager' : 'lazy'}
+        decoding="async"
+        width="800"
+        height="800"
+        onerror="this.onerror=null;this.removeAttribute('srcset');this.src='/placeholder-jewelry.svg'"
+      />
+      {item.availability === 'sold_out' && <span class="badge badge--sold_out product-card__flag">Agotado</span>}
+    </div>
+    <div class="product-card__body">
+      <p class="product-card__code">{item.code}</p>
+      <h3 class="product-card__name">{item.name}</h3>
+      <div class="product-card__meta">
+        <span class="product-card__price">{formatPrice(item.price)}</span>
+        {item.availability === 'available' && <span class="product-card__status">{AVAILABILITY_LABEL.available}</span>}
+      </div>
+    </div>
+  </a>
+</article>
+
+<style>
+  .product-card__link {
+    display: block;
+    height: 100%;
+    background: var(--white-warm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition:
+      box-shadow 0.35s var(--ease),
+      transform 0.35s var(--ease);
+  }
+  .product-card__link:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-3px);
+  }
+  .product-card__media {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--beige-100);
+    overflow: hidden;
+  }
+  .product-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.8s var(--ease);
+  }
+  .product-card__link:hover img {
+    transform: scale(1.04);
+  }
+  .product-card__flag {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+  }
+  .product-card [data-product][data-availability='sold_out'] img,
+  [data-availability='sold_out'] .product-card__media img {
+    filter: grayscale(0.35) opacity(0.8);
+  }
+  .product-card__body {
+    padding: 0.85rem 0.95rem 1rem;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .product-card__code {
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+  }
+  .product-card__name {
+    font-size: 1.15rem;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .product-card__meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .product-card__price {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .product-card__status {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--success);
+  }
+  @media (max-width: 420px) {
+    .product-card__name {
+      font-size: 1.02rem;
+    }
+    .product-card__body {
+      padding: 0.7rem 0.75rem 0.85rem;
+    }
+  }
+</style>

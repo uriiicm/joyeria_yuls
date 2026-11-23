@@ -1,0 +1,129 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { PUBLIC_STORE_NAME } from 'astro:env/client';
+---
+
+<BaseLayout title="Iniciar sesión" noindex>
+  <main class="login">
+    <form class="login__card card fade-in" data-login novalidate>
+      <p class="eyebrow">Administración</p>
+      <h1><img src="/logo.webp" alt={PUBLIC_STORE_NAME} width="900" height="262" /></h1>
+      <p class="login__notice" data-notice hidden></p>
+      <label class="field">
+        <span>Correo</span>
+        <input class="input" type="email" name="email" autocomplete="username" required inputmode="email" />
+      </label>
+      <label class="field">
+        <span>Contraseña</span>
+        <input class="input" type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <p class="login__error" data-error role="alert" hidden></p>
+      <button class="btn btn--block" type="submit">Entrar</button>
+    </form>
+  </main>
+</BaseLayout>
+
+<script>
+  import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+  import { FirebaseError } from 'firebase/app';
+  import { clientAuth } from '../../services/firebase/firebase-client.service';
+
+  const form = document.querySelector<HTMLFormElement>('[data-login]')!;
+  const errorEl = form.querySelector<HTMLElement>('[data-error]')!;
+  const notice = form.querySelector<HTMLElement>('[data-notice]')!;
+  const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
+  const params = new URLSearchParams(location.search);
+
+  const notices: Record<string, string> = {
+    expired: 'Tu sesión expiró. Vuelve a iniciar sesión.',
+    forbidden: 'Esa cuenta no tiene permisos de administración.',
+  };
+  const reason = params.get('reason');
+  if (reason && notices[reason]) {
+    notice.textContent = notices[reason];
+    notice.hidden = false;
+  }
+
+  const messages: Record<string, string> = {
+    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+    'auth/invalid-email': 'El correo no es válido.',
+    'auth/user-disabled': 'Esta cuenta está deshabilitada.',
+    'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e intenta de nuevo.',
+    'auth/network-request-failed': 'Sin conexión. Revisa tu internet.',
+  };
+
+  const safeNext = () => {
+    const next = params.get('next') ?? '/admin';
+    return next.startsWith('/admin') && !next.startsWith('//') ? next : '/admin';
+  };
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+    const data = new FormData(form);
+    const email = String(data.get('email') ?? '').trim();
+    const password = String(data.get('password') ?? '');
+    if (!email || !password) {
+      errorEl.textContent = 'Escribe tu correo y contraseña.';
+      errorEl.hidden = false;
+      return;
+    }
+    button.setAttribute('aria-busy', 'true');
+    try {
+      const { user } = await signInWithEmailAndPassword(clientAuth, email, password);
+      const token = await user.getIdTokenResult(true);
+      if (token.claims.admin !== true) {
+        await signOut(clientAuth);
+        throw new Error('forbidden');
+      }
+      location.replace(safeNext());
+    } catch (err) {
+      const code = err instanceof FirebaseError ? err.code : (err as Error).message;
+      errorEl.textContent =
+        code === 'forbidden' ? notices.forbidden! : (messages[code] ?? 'No se pudo iniciar sesión. Intenta de nuevo.');
+      errorEl.hidden = false;
+    } finally {
+      button.removeAttribute('aria-busy');
+    }
+  });
+</script>
+
+<style>
+  .login {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 1.25rem;
+    background:
+      radial-gradient(100% 60% at 80% 0%, var(--rose-100), transparent 60%),
+      radial-gradient(80% 60% at 0% 100%, var(--beige-100), transparent 60%),
+      var(--cream);
+  }
+  .login__card {
+    width: min(100%, 400px);
+    padding: 2rem 1.5rem;
+    display: grid;
+    gap: 1rem;
+    text-align: center;
+  }
+  .login__card .field {
+    text-align: left;
+  }
+  .login__card h1 img {
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+    margin: 0.25rem auto 0.75rem;
+  }
+  .login__error {
+    color: var(--danger);
+    font-size: 0.9rem;
+  }
+  .login__notice {
+    background: var(--rose-50);
+    border: 1px solid var(--rose-100);
+    padding: 0.65rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+  }
+</style>

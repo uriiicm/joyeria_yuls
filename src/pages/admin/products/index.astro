@@ -1,0 +1,177 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Joyas" active="products">
+  <h1 class="page-title">Joyas</h1>
+  <p class="page-sub" data-summary>Cargando…</p>
+
+  <div class="toolbar">
+    <input class="input" type="search" placeholder="Buscar por nombre o código" data-q />
+    <select class="input" data-status>
+      <option value="">Todas</option>
+      <option value="draft">Borradores</option>
+      <option value="published">Publicadas</option>
+      <option value="archived">Archivadas</option>
+      <option value="pending-ai">Sin imágenes IA</option>
+    </select>
+  </div>
+
+  <div class="batch card" data-batch hidden>
+    <div>
+      <strong data-batch-title></strong>
+      <p class="muted" data-batch-text></p>
+    </div>
+    <div class="batch__actions">
+      <button class="btn btn--ghost btn--sm" type="button" data-batch-estimate>Calcular costo</button>
+      <button class="btn btn--gold btn--sm" type="button" data-batch-run hidden>Generar</button>
+    </div>
+  </div>
+
+  <div class="list" data-list><p class="empty-state">Cargando…</p></div>
+</AdminLayout>
+
+<script>
+  import { api, requireAdminSession } from '../../../client/admin-session';
+  import { productRow, subscribeProducts } from '../../../client/products';
+  import { busy, sleep, toast } from '../../../client/ui';
+  import type { Product } from '../../../types/product';
+
+  await requireAdminSession();
+
+  const list = document.querySelector<HTMLElement>('[data-list]')!;
+  const q = document.querySelector<HTMLInputElement>('[data-q]')!;
+  const statusFilter = document.querySelector<HTMLSelectElement>('[data-status]')!;
+  const summary = document.querySelector<HTMLElement>('[data-summary]')!;
+  const batch = document.querySelector<HTMLElement>('[data-batch]')!;
+  const batchTitle = batch.querySelector<HTMLElement>('[data-batch-title]')!;
+  const batchText = batch.querySelector<HTMLElement>('[data-batch-text]')!;
+  const estimateBtn = batch.querySelector<HTMLButtonElement>('[data-batch-estimate]')!;
+  const runBtn = batch.querySelector<HTMLButtonElement>('[data-batch-run]')!;
+
+  let products: Product[] = [];
+  let running = false;
+
+  // Lotes pequeños: como máximo 5 joyas por ejecución, una a la vez.
+  const BATCH_SIZE = 5;
+  const pendingGeneration = () =>
+    products.filter(
+      (p) => p.status !== 'archived' && p.images.original && p.ai.analysisStatus === 'completed' && (p.ai.generationStatus === 'idle' || p.ai.generationStatus === 'failed'),
+    );
+
+  const render = () => {
+    const term = q.value.trim().toLowerCase();
+    const st = statusFilter.value;
+    const filtered = products.filter((p) => {
+      const matches = !term || p.name.toLowerCase().includes(term) || p.code.toLowerCase().includes(term);
+      const status = !st || (st === 'pending-ai' ? p.ai.generationStatus !== 'completed' : p.status === st);
+      return matches && status;
+    });
+    list.innerHTML = filtered.length ? filtered.map(productRow).join('') : '<p class="empty-state">No hay joyas con ese filtro.</p>';
+    summary.textContent = `${products.length} joyas · ${products.filter((p) => p.status === 'published').length} publicadas`;
+
+    if (!running) {
+      const pending = pendingGeneration();
+      batch.hidden = pending.length === 0;
+      batchTitle.textContent = `${pending.length} ${pending.length === 1 ? 'joya' : 'joyas'} sin imágenes publicitarias`;
+      batchText.textContent = `Se procesan de ${BATCH_SIZE} en ${BATCH_SIZE}, una a la vez. Primero calcula el costo.`;
+    }
+  };
+
+  subscribeProducts(
+    (p) => {
+      products = p;
+      render();
+    },
+    () => (list.innerHTML = '<p class="empty-state">No se pudieron cargar las joyas.</p>'),
+  );
+  q.addEventListener('input', render);
+  statusFilter.addEventListener('change', render);
+
+  let queue: Product[] = [];
+  estimateBtn.addEventListener('click', () =>
+    busy(estimateBtn, async () => {
+      queue = pendingGeneration().slice(0, BATCH_SIZE);
+      if (!queue.length) return;
+      try {
+        // Todas las joyas usan el mismo modelo y parámetros: se estima una y se multiplica.
+        const { estimate } = await api<{ estimate: { totalUsd: string; model: string } }>('/api/ai/generate-jewelry-images', {
+          method: 'POST',
+          body: JSON.stringify({ productId: queue[0]!.id, estimateOnly: true }),
+        });
+        const total = (Number(estimate.totalUsd) * queue.length).toFixed(2);
+        batchText.textContent = `${queue.length} joyas × 2 imágenes con ${estimate.model}. Costo estimado por Higgsfield: ≈ US$ ${total}.`;
+        runBtn.hidden = false;
+      } catch (err) {
+        toast((err as Error).message, 'error');
+      }
+    }).catch(() => {}),
+  );
+
+  runBtn.addEventListener('click', () =>
+    busy(runBtn, async () => {
+      running = true;
+      estimateBtn.disabled = true;
+      let done = 0;
+      for (const p of queue) {
+        batchText.textContent = `Enviando ${done + 1} de ${queue.length}: ${p.name || p.code}…`;
+        try {
+          await api(`/api/ai/generate-jewelry-images`, { method: 'POST', body: JSON.stringify({ productId: p.id }) });
+        } catch (err) {
+          toast(`${p.code}: ${(err as Error).message}`, 'error', 6000);
+          if ((err as { status?: number }).status === 429) await sleep(30_000);
+        }
+        done++;
+        await sleep(1500);
+      }
+      // Consulta el estado (y guarda en R2 los resultados) hasta que todo termine, máximo 15 min.
+      const deadline = Date.now() + 15 * 60_000;
+      let pending = queue.map((p) => p.id);
+      while (pending.length && Date.now() < deadline) {
+        batchText.textContent = `Generando… ${queue.length - pending.length} de ${queue.length} listas. Puedes dejar esta pantalla abierta.`;
+        const still: string[] = [];
+        for (const id of pending) {
+          try {
+            const s = await api<{ generationStatus: string }>(`/api/ai/generation-status?productId=${encodeURIComponent(id)}`);
+            if (s.generationStatus === 'generating') still.push(id);
+          } catch {
+            still.push(id);
+          }
+        }
+        pending = still;
+        if (pending.length) await sleep(6000);
+      }
+      batchText.textContent = pending.length
+        ? `${pending.length} joyas siguen en proceso. Ábrelas más tarde para terminar de guardar sus imágenes.`
+        : `Listo: ${done} joyas procesadas.`;
+      runBtn.hidden = true;
+      estimateBtn.disabled = false;
+      running = false;
+    }).catch(() => {}),
+  );
+</script>
+
+<style>
+  .toolbar {
+    display: grid;
+    grid-template-columns: 1fr 10rem;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+  }
+  .batch {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: var(--rose-50);
+    border-color: var(--rose-100);
+  }
+  .batch p {
+    font-size: 0.88rem;
+  }
+  .batch__actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+</style>

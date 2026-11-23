@@ -1,0 +1,27 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SiteHeader from '../components/ui/SiteHeader.astro';
+---
+
+<BaseLayout title="Página no encontrada" noindex>
+  <SiteHeader />
+  <main class="container nf">
+    <p class="eyebrow">404</p>
+    <h1>Esta pieza ya no está aquí</h1>
+    <p class="muted">Puede que el enlace haya cambiado o que la joya ya no forme parte del catálogo.</p>
+    <a class="btn btn--rose" href="/">Ver catálogo</a>
+  </main>
+</BaseLayout>
+
+<style>
+  .nf {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 1rem;
+    padding-block: 6rem;
+  }
+  h1 {
+    font-size: 2.4rem;
+  }
+</style>

@@ -1,0 +1,346 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Agregar joya" active="new">
+  <h1 class="page-title">Agregar joya</h1>
+  <p class="page-sub">Toma una foto con buena luz y la joya al centro.</p>
+
+  <!-- 1. Elegir origen -->
+  <section class="step" data-step="choose">
+    <button class="source card" type="button" data-open-camera>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4V8Z" /><circle cx="12" cy="13" r="3.5" /></svg>
+      <strong>Tomar foto</strong>
+      <span class="muted">Usa la cámara del celular</span>
+    </button>
+    <label class="source card">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /><path d="m4 16 4.5-4.5 3.5 3.5 2.5-2.5L20 18" /><circle cx="15.5" cy="9.5" r="1.5" /></svg>
+      <strong>Elegir de la galería</strong>
+      <span class="muted">JPG, PNG o WebP</span>
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden data-file />
+    </label>
+    <!-- Alternativa nativa si getUserMedia no está disponible -->
+    <input type="file" accept="image/*" capture="environment" hidden data-native-capture />
+    <p class="hint" data-camera-error role="alert" hidden></p>
+  </section>
+
+  <!-- 2. Cámara -->
+  <section class="step camera" data-step="camera" hidden>
+    <div class="camera__frame">
+      <video data-video autoplay playsinline muted></video>
+      <div class="camera__guide" aria-hidden="true"></div>
+    </div>
+    <div class="camera__controls">
+      <button class="btn btn--ghost" type="button" data-cancel-camera>Cancelar</button>
+      <button class="shutter" type="button" data-capture aria-label="Tomar foto"></button>
+      <button class="btn btn--ghost" type="button" data-switch hidden aria-label="Cambiar cámara">↺</button>
+    </div>
+  </section>
+
+  <!-- 3. Vista previa -->
+  <section class="step" data-step="preview" hidden>
+    <img class="preview card" data-preview alt="Vista previa de la fotografía" />
+    <div class="row">
+      <button class="btn btn--ghost" type="button" data-retake>Repetir</button>
+      <button class="btn" type="button" data-accept>Usar esta foto</button>
+    </div>
+  </section>
+
+  <!-- 4. Procesando -->
+  <section class="step card progress" data-step="progress" hidden>
+    <ol>
+      <li data-task="prepare">Preparando fotografía…</li>
+      <li data-task="upload">Subiendo fotografía…</li>
+      <li data-task="analyze">Analizando la joya con IA…</li>
+    </ol>
+    <p class="hint" data-progress-error role="alert" hidden></p>
+    <button class="btn btn--ghost" type="button" data-restart hidden>Intentar de nuevo</button>
+  </section>
+</AdminLayout>
+
+<script>
+  import { api, requireAdminSession } from '../../../client/admin-session';
+  import { Camera, CAMERA_ERROR_MESSAGE, type CameraError } from '../../../client/camera';
+  import { prepareImage, ImageValidationError } from '../../../client/image-processing.service';
+  import type { Product } from '../../../types/product';
+
+  await requireAdminSession();
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const steps = ['choose', 'camera', 'preview', 'progress'] as const;
+  const show = (name: (typeof steps)[number]) =>
+    steps.forEach((s) => ($(`[data-step="${s}"]`).hidden = s !== name));
+
+  const video = $<HTMLVideoElement>('[data-video]');
+  const camera = new Camera(video);
+  const cameraError = $('[data-camera-error]');
+  const preview = $<HTMLImageElement>('[data-preview]');
+  let selected: Blob | null = null;
+  let previewUrl: string | null = null;
+
+  function setPreview(blob: Blob) {
+    selected = blob;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(blob);
+    preview.src = previewUrl;
+    show('preview');
+  }
+
+  function cameraFailed(code: CameraError) {
+    cameraError.textContent = CAMERA_ERROR_MESSAGE[code];
+    cameraError.hidden = false;
+    show('choose');
+  }
+
+  $('[data-open-camera]').addEventListener('click', async () => {
+    cameraError.hidden = true;
+    if (!Camera.isSupported()) {
+      // iOS/Android abren la cámara nativa con este input.
+      $<HTMLInputElement>('[data-native-capture]').click();
+      return;
+    }
+    show('camera');
+    try {
+      await camera.start();
+      $('[data-switch]').hidden = !(await camera.canSwitch());
+    } catch (err) {
+      cameraFailed(err as CameraError);
+    }
+  });
+
+  $('[data-switch]').addEventListener('click', () => camera.switch().catch((e) => cameraFailed(e as CameraError)));
+  $('[data-cancel-camera]').addEventListener('click', () => {
+    camera.stop();
+    show('choose');
+  });
+  $('[data-capture]').addEventListener('click', async () => {
+    try {
+      const blob = await camera.capture();
+      camera.stop();
+      setPreview(blob);
+    } catch (err) {
+      cameraError.textContent = (err as Error).message;
+      cameraError.hidden = false;
+    }
+  });
+
+  for (const sel of ['[data-file]', '[data-native-capture]']) {
+    $<HTMLInputElement>(sel).addEventListener('change', (e) => {
+      const input = e.currentTarget as HTMLInputElement;
+      const file = input.files?.[0];
+      input.value = '';
+      if (file) setPreview(file);
+    });
+  }
+
+  $('[data-retake]').addEventListener('click', () => {
+    selected = null;
+    show('choose');
+  });
+
+  const task = (name: string, state: 'active' | 'done' | 'error') => ($(`[data-task="${name}"]`).dataset.state = state);
+  const progressError = $('[data-progress-error]');
+  const restart = $('[data-restart]');
+  restart.addEventListener('click', () => {
+    document.querySelectorAll<HTMLElement>('[data-task]').forEach((el) => delete el.dataset.state);
+    progressError.hidden = true;
+    restart.hidden = true;
+    show(selected ? 'preview' : 'choose');
+  });
+
+  let processing = false;
+  $('[data-accept]').addEventListener('click', async () => {
+    if (!selected || processing) return;
+    processing = true;
+    show('progress');
+    let product: Product | null = null;
+    let stage = 'prepare';
+    try {
+      task('prepare', 'active');
+      const prepared = await prepareImage(selected);
+      task('prepare', 'done');
+
+      stage = 'upload';
+      task('upload', 'active');
+      const created = await api<{ product: Product; upload: { url: string; contentType: string } }>('/api/products', {
+        method: 'POST',
+        body: JSON.stringify({ contentType: prepared.contentType, size: prepared.blob.size, width: prepared.width, height: prepared.height }),
+      });
+      product = created.product;
+      const put = await fetch(created.upload.url, {
+        method: 'PUT',
+        headers: { 'Content-Type': created.upload.contentType },
+        body: prepared.blob,
+      }).catch(() => null);
+      if (!put?.ok) throw new Error('No se pudo subir la fotografía. Revisa tu conexión.');
+      task('upload', 'done');
+
+      stage = 'analyze';
+      task('analyze', 'active');
+      try {
+        await api('/api/ai/analyze-jewelry', { method: 'POST', body: JSON.stringify({ productId: product.id }) });
+        task('analyze', 'done');
+        location.href = `/admin/products/edit?id=${encodeURIComponent(product.id)}&new=1`;
+      } catch (err) {
+        // La foto ya está guardada: se continúa en la ficha, donde se puede reintentar el análisis.
+        task('analyze', 'error');
+        location.href = `/admin/products/edit?id=${encodeURIComponent(product.id)}&new=1&analysis=failed&msg=${encodeURIComponent((err as Error).message)}`;
+      }
+    } catch (err) {
+      task(stage, 'error');
+      if (product && stage === 'upload') {
+        await api(`/api/products/${product.id}`, { method: 'DELETE' }).catch(() => {});
+      }
+      progressError.textContent = err instanceof ImageValidationError ? err.message : (err as Error).message;
+      progressError.hidden = false;
+      restart.hidden = false;
+      processing = false;
+    }
+  });
+</script>
+
+<style>
+  .step {
+    display: grid;
+    gap: 0.85rem;
+  }
+  .step[hidden] {
+    display: none;
+  }
+  .source {
+    display: grid;
+    justify-items: center;
+    gap: 0.3rem;
+    padding: 1.75rem 1rem;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: center;
+    transition: box-shadow 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+  .source:hover {
+    box-shadow: var(--shadow);
+  }
+  .source:active {
+    transform: scale(0.99);
+  }
+  .source svg {
+    width: 38px;
+    height: 38px;
+    fill: none;
+    stroke: var(--gold);
+    stroke-width: 1.3;
+    margin-bottom: 0.35rem;
+  }
+  .source strong {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 500;
+  }
+  .source span {
+    font-size: 0.85rem;
+  }
+  .hint {
+    color: var(--danger);
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  .camera__frame {
+    position: relative;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: #1f1b19;
+    aspect-ratio: 3 / 4;
+    max-height: 68dvh;
+    margin-inline: auto;
+    width: 100%;
+  }
+  .camera__frame video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .camera__guide {
+    position: absolute;
+    inset: 18%;
+    border: 1px dashed rgb(255 255 255 / 0.55);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .camera__controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    justify-items: center;
+  }
+  .shutter {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 4px solid var(--white-warm);
+    background: var(--rose-200);
+    box-shadow: 0 0 0 2px var(--rose-400), var(--shadow);
+    cursor: pointer;
+  }
+  .shutter:active {
+    transform: scale(0.94);
+  }
+  .preview {
+    width: 100%;
+    max-height: 62dvh;
+    object-fit: contain;
+    background: var(--beige-100);
+    padding: 0;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .progress {
+    padding: 1.5rem;
+  }
+  .progress ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+  }
+  .progress li {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    color: var(--muted);
+  }
+  .progress li::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1.5px solid var(--beige-200);
+    flex: none;
+  }
+  .progress li[data-state='active'] {
+    color: var(--ink);
+  }
+  .progress li[data-state='active']::before {
+    border-color: var(--beige-200);
+    border-top-color: var(--gold);
+    animation: spin 0.8s linear infinite;
+  }
+  .progress li[data-state='done'] {
+    color: var(--success);
+  }
+  .progress li[data-state='done']::before {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .progress li[data-state='error'] {
+    color: var(--danger);
+  }
+  .progress li[data-state='error']::before {
+    background: var(--danger);
+    border-color: var(--danger);
+  }
+</style>

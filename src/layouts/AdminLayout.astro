@@ -1,0 +1,241 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { PUBLIC_STORE_NAME } from 'astro:env/client';
+
+interface Props {
+  title: string;
+  active?: 'dashboard' | 'products' | 'new';
+}
+const { title, active } = Astro.props;
+---
+
+<BaseLayout title={`${title} · Admin`} noindex>
+  <div class="admin">
+    <header class="admin-top">
+      <a href="/admin" class="admin-brand"><img src="/logo.webp" alt={PUBLIC_STORE_NAME} width="900" height="262" /> <span>admin</span></a>
+      <button type="button" class="btn btn--ghost btn--sm" data-logout>Salir</button>
+    </header>
+
+    <div class="admin-loading" data-auth-loading>
+      <span class="spinner" aria-hidden="true"></span> Verificando sesión…
+    </div>
+
+    <main class="admin-main container">
+      <slot />
+    </main>
+
+    <nav class="admin-nav" aria-label="Administración">
+      <a href="/admin" aria-current={active === 'dashboard' ? 'page' : undefined}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z" /></svg>
+        Inicio
+      </a>
+      <a href="/admin/products/new" class="admin-nav__primary" aria-current={active === 'new' ? 'page' : undefined}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        Agregar
+      </a>
+      <a href="/admin/products" aria-current={active === 'products' ? 'page' : undefined}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+        Joyas
+      </a>
+      <a href="/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-5 0-9 7-9 7s4 7 9 7 9-7 9-7-4-7-9-7Zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" /></svg>
+        Catálogo
+      </a>
+    </nav>
+  </div>
+</BaseLayout>
+
+<script>
+  import { logout, requireAdminSession } from '../client/admin-session';
+  document.querySelector('[data-logout]')?.addEventListener('click', () => logout());
+  requireAdminSession().then(() => document.querySelector('[data-auth-loading]')?.remove());
+</script>
+
+<style is:global>
+  html:not([data-auth='ready']) .admin-main {
+    visibility: hidden;
+  }
+  .admin {
+    min-height: 100dvh;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, var(--rose-50), var(--cream) 320px);
+  }
+  .admin-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem var(--gutter);
+    max-width: var(--maxw);
+    margin-inline: auto;
+  }
+  .admin-brand {
+    display: inline-flex;
+    align-items: center;
+  }
+  .admin-brand img {
+    height: 34px;
+    width: auto;
+  }
+  .admin-brand span {
+    font-family: var(--font-body);
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-left: 0.3rem;
+  }
+  .admin-main {
+    padding-top: 0.5rem;
+  }
+  .admin-loading {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 1rem;
+    color: var(--muted);
+  }
+  .admin-nav {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+    background: rgb(255 253 249 / 0.94);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  @media (min-width: 900px) {
+    .admin-nav {
+      inset: auto 50% 18px auto;
+      transform: translateX(50%);
+      width: 520px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      box-shadow: var(--shadow);
+    }
+  }
+  .admin-nav a {
+    display: grid;
+    justify-items: center;
+    gap: 0.15rem;
+    padding: 0.35rem 0;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .admin-nav a[aria-current='page'] {
+    color: var(--ink);
+  }
+  .admin-nav svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .admin-nav__primary svg {
+    width: 34px;
+    height: 34px;
+    padding: 6px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: var(--rose-200);
+    color: var(--ink);
+  }
+  .page-title {
+    font-size: clamp(1.9rem, 6vw, 2.4rem);
+    margin-bottom: 0.25rem;
+  }
+  .page-sub {
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+  }
+  .section {
+    margin-top: 1.75rem;
+  }
+  .section h2 {
+    font-size: 1.45rem;
+    margin-bottom: 0.75rem;
+  }
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--beige-200);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+    flex: none;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  #toasts {
+    position: fixed;
+    left: 50%;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 50;
+    display: grid;
+    gap: 0.5rem;
+    width: min(92vw, 420px);
+  }
+  .toast {
+    padding: 0.8rem 1rem;
+    border-radius: var(--radius-sm);
+    background: var(--ink);
+    color: var(--white-warm);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.92rem;
+    animation: fade-in 0.3s var(--ease);
+  }
+  .toast--error {
+    background: var(--danger);
+  }
+  .toast--success {
+    background: #557d64;
+  }
+  .admin-item {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.7rem;
+  }
+  .admin-item img {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--beige-100);
+  }
+  .admin-item__title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    line-height: 1.2;
+  }
+  .admin-item__meta {
+    font-size: 0.78rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    align-items: center;
+    margin-top: 0.2rem;
+  }
+  .list {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--muted);
+  }
+</style>

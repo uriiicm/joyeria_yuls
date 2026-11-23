@@ -1,0 +1,31 @@
+{
+  "name": "catalogo-joyeria",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build",
+    "check": "astro check",
+    "set-admin": "node scripts/set-admin.mjs",
+    "test:r2": "node --env-file=.env scripts/test-r2.mjs",
+    "hf:estimate": "node --env-file=.env scripts/compare-higgsfield-models.mjs",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only database",
+    "test:gemini": "node --env-file=.env scripts/test-gemini.mjs"
+  },
+  "dependencies": {
+    "@astrojs/vercel": "^11.0.22",
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0",
+    "astro": "^7.4.13",
+    "firebase": "^13.4.0",
+    "firebase-admin": "^14.5.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "^6.0.3"
+  }
+}
