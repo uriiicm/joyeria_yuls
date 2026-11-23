@@ -108,6 +108,14 @@ export function catalogImages(p: Product): string[] {
   return p.images.original ? [p.images.original.url] : [];
 }
 
+export function catalogThumbnails(p: Product): string[] {
+  const generated = GENERATED_IMAGE_TYPES.map((t) => p.images.generated?.[t])
+    .filter((g): g is NonNullable<typeof g> => Boolean(g?.url))
+    .map((g) => g.thumbUrl ?? g.url);
+  if (generated.length) return generated;
+  return p.images.original ? [p.images.original.url] : [];
+}
+
 function toCatalogItem(p: Product): CatalogItem {
   return {
     id: p.id,
@@ -123,6 +131,7 @@ function toCatalogItem(p: Product): CatalogItem {
     features: p.features,
     availability: p.availability,
     images: catalogImages(p),
+    thumbnails: catalogThumbnails(p),
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };

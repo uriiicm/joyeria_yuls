@@ -1,14 +1,14 @@
 ---
 import type { CatalogItem } from '../../types/product';
 import { AVAILABILITY_LABEL, formatPrice } from '../../lib/utils/format';
-import { FALLBACK_IMAGE, imageSrcSet, optimizedImage } from '../../lib/utils/images';
+import { FALLBACK_IMAGE } from '../../lib/utils/images';
 
 interface Props {
   item: CatalogItem;
   eager?: boolean;
 }
 const { item, eager = false } = Astro.props;
-const cover = item.images[0];
+const cover = item.thumbnails?.[0] ?? item.images[0];
 const search = [item.name, item.code, item.category, item.apparentMaterial, item.style, ...item.colors]
   .join(' ')
   .toLowerCase();
@@ -26,15 +26,13 @@ const search = [item.name, item.code, item.category, item.apparentMaterial, item
   <a href={`/producto/${item.id}`} class="product-card__link">
     <div class="product-card__media">
       <img
-        src={cover ? optimizedImage(cover, 800) : FALLBACK_IMAGE}
-        srcset={cover ? imageSrcSet(cover) : undefined}
-        sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+        src={cover ?? FALLBACK_IMAGE}
         alt={item.name}
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
-        width="800"
-        height="800"
-        onerror="this.onerror=null;this.removeAttribute('srcset');this.src='/placeholder-jewelry.svg'"
+        width="600"
+        height="600"
+        onerror="this.onerror=null;this.src='/placeholder-jewelry.svg'"
       />
       {item.availability === 'sold_out' && <span class="badge badge--sold_out product-card__flag">Agotado</span>}
     </div>

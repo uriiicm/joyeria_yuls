@@ -4,13 +4,13 @@ Catálogo público y panel privado para registrar joyas desde el celular. La adm
 
 | Pieza | Tecnología |
 |---|---|
-| Framework | Astro 7 + TypeScript (adaptador `@astrojs/vercel`) |
+| Framework | Astro 7 + TypeScript (adaptador `@astrojs/node`, servidor independiente) |
 | Autenticación | Firebase Authentication (correo y contraseña, una administradora) |
 | Base de datos | Firebase Realtime Database |
 | Fotografías | Cloudflare R2 (sustituye a Firebase Storage: no requiere plan Blaze) |
 | Análisis de fotos | Gemini API (`generateContent`, salida JSON con esquema) |
 | Imágenes publicitarias | Higgsfield API (asíncrona, con estimación de costo) |
-| Hosting | Vercel |
+| Hosting | Render (Web Service, Node 22) |
 
 > **Cambio respecto al plan original:** las fotos se guardan en Cloudflare R2 en lugar de Firebase Storage. Así el proyecto de Firebase puede quedarse en el plan gratuito Spark. Las reglas de seguridad de los archivos se sustituyen por endpoints que validan a la administradora antes de emitir URLs de subida firmadas.
 
@@ -19,13 +19,13 @@ Catálogo público y panel privado para registrar joyas desde el celular. La adm
 ## 1. Arquitectura
 
 ```
-Navegador (catálogo)  ──SSR──▶  Astro en Vercel  ──Admin SDK──▶  RTDB  catalog/
+Navegador (catálogo)  ──SSR──▶  Astro (Node) en Render  ──Admin SDK──▶  RTDB  catalog/
 Navegador (admin)     ──Bearer ID token──▶  /api/*  ──▶  Gemini · Higgsfield · R2 · RTDB products/
 Navegador (admin)     ──PUT con URL firmada──▶  R2 (foto original)
 Navegador (admin)     ──SDK cliente (solo lectura)──▶  RTDB products/  (reglas: claim admin)
 ```
 
-- **Páginas públicas** (`/`, `/producto/[id]`): se renderizan en el servidor con `Cache-Control: s-maxage=60, stale-while-revalidate=600`, así que la CDN de Vercel las sirve casi siempre desde caché. Tienen metadatos SEO, Open Graph y JSON-LD para que se vean bien al compartirse por WhatsApp.
+- **Páginas públicas** (`/`, `/producto/[id]`): se renderizan en el servidor con `Cache-Control: s-maxage=60, stale-while-revalidate=600`, que aprovecha cualquier CDN que pongas delante, como Cloudflare. Tienen metadatos SEO, Open Graph y JSON-LD para que se vean bien al compartirse por WhatsApp.
 - **Panel `/admin`**: HTML estático (pre-renderizado). La sesión se valida en el navegador y **en cada endpoint**.
 - **Endpoints `/api/*`**: los únicos que conocen las claves de Gemini, Higgsfield, R2 y Firebase Admin.
 
@@ -92,7 +92,7 @@ En R2 los archivos quedan así: `products/{id}/original/original-<timestamp>.jpg
 - Una cuenta de Cloudflare con R2 activado.
 - Una API key de Gemini ([Google AI Studio](https://aistudio.google.com/)).
 - Una API key de Higgsfield con saldo, en formato `<key-id>:<key-secret>` ([documentación](https://docs.higgsfield.ai/docs/api-reference/overview)).
-- Una cuenta de Vercel para desplegar.
+- Una cuenta de Render para desplegar (Web Service Starter o superior).
 
 ```bash
 npm install
@@ -166,7 +166,7 @@ curl "$PUBLIC_FIREBASE_DATABASE_URL/catalog.json"    # → datos públicos o nul
    ```json
    [
      {
-       "AllowedOrigins": ["http://localhost:4321", "https://tu-dominio.vercel.app"],
+       "AllowedOrigins": ["http://localhost:4321", "https://tu-servicio.onrender.com"],
        "AllowedMethods": ["PUT", "GET"],
        "AllowedHeaders": ["Content-Type"],
        "MaxAgeSeconds": 3600
@@ -314,22 +314,37 @@ Ver `.env.example`. El esquema se valida con `astro:env` (`astro.config.mjs`): s
 ```bash
 npm run dev       # http://localhost:4321
 npm run check     # tipos
-npm run build     # check + build para Vercel (.vercel/output)
+npm run build     # check + build (dist/)
+npm start         # arranca el servidor compilado (usa HOST y PORT)
 ```
 
 > En Astro 7, `astro dev` queda en segundo plano. Para detenerlo usa `npx astro dev stop`, y para ver el registro, `npx astro dev logs`.
 
-### Vercel
-1. Importa el repositorio en Vercel. Detecta Astro automáticamente.
-2. En **Settings → Environment Variables**, copia todas las variables de `.env`. `FIREBASE_SERVICE_ACCOUNT_BASE64` va tal cual, en una sola línea.
-3. En **Settings → Node.js Version**, elige **22.x**.
+### Render
+1. **New → Web Service** y conecta el repositorio de GitHub.
+2. Configuración:
+   | Campo | Valor |
+   |---|---|
+   | Root Directory | *(vacío)* |
+   | Runtime | Node |
+   | Build Command | `npm ci && npm run build` |
+   | Start Command | `npm start` |
+   | Instance Type | Starter o superior. El plan gratuito se apaga tras unos minutos sin visitas |
+3. **Environment → Add from .env**: pega todas las variables. `NODE_VERSION=22.23.5` y `HOST=0.0.0.0` son obligatorias; Render define `PORT` solo.
+   - `FIREBASE_SERVICE_ACCOUNT_BASE64` va tal cual, en una sola línea.
+   - Las variables `PUBLIC_*` se fijan **al compilar**: si cambias alguna, vuelve a desplegar.
 4. Después del primer despliegue:
-   - pon `PUBLIC_SITE_URL=https://tu-dominio` y vuelve a desplegar;
-   - agrega el dominio a la política CORS de R2;
+   - pon `PUBLIC_SITE_URL=https://tu-servicio.onrender.com` (o tu dominio) y vuelve a desplegar;
+   - agrega ese dominio a la política CORS de R2;
    - en Firebase Console, agrégalo en **Authentication → Configuración → Dominios autorizados**.
-5. Las imágenes del catálogo pasan por la CDN de imágenes de Vercel (`/_vercel/image`, anchos 400/800/1200, AVIF o WebP). El dominio de R2 se autoriza automáticamente desde `R2_PUBLIC_BASE_URL`.
+5. Cada commit a `main` despliega automáticamente.
 
-Los endpoints corren como funciones *serverless* de Node (`maxDuration: 60 s`). Ninguna espera a Higgsfield: solo envían o consultan.
+### Imágenes
+Las imágenes generadas se guardan ya optimizadas en R2: un WebP de hasta 1600 px para el detalle y una miniatura de 600 px para tarjetas y carrito. Por eso no hace falta un servicio de imágenes del hosting. Para convertir imágenes antiguas en PNG:
+```bash
+npm run images:optimize            # vista previa
+npm run images:optimize -- --apply # convierte (conserva los originales)
+```
 
 ---
 
@@ -350,9 +365,9 @@ Los endpoints corren como funciones *serverless* de Node (`maxDuration: 60 s`). 
 
 | Síntoma | Causa y solución |
 |---|---|
-| `EnvInvalidVariables … is missing` | Falta una variable en `.env` o en Vercel |
+| `EnvInvalidVariables … is missing` | Falta una variable en `.env` o en Render |
 | Login: "Esa cuenta no tiene permisos" | Ejecuta `npm run set-admin` y vuelve a iniciar sesión |
-| `403 forbidden` en endpoints | El UID no está en `ADMIN_UIDS` en el entorno donde corre el servidor (local o Vercel) |
+| `403 forbidden` en endpoints | El UID no está en `ADMIN_UIDS` en el entorno donde corre el servidor (local o Render) |
 | La subida de la foto falla en el navegador | CORS de R2 sin el origen actual, o URL firmada vencida (dura 10 min) |
 | Fotos rotas en el catálogo | `R2_PUBLIC_BASE_URL` incorrecta o acceso público del bucket desactivado |
 | Fotos HEIC de iPhone no se leen | El navegador no decodifica HEIC: usa **Tomar foto** o exporta a JPG |

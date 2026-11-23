@@ -32,7 +32,8 @@ export function subscribeProduct(id: string, cb: (p: Product | null) => void, on
 }
 
 export function coverUrl(p: Product): string {
-  return p.images.generated?.product?.url ?? p.images.generated?.lifestyle?.url ?? p.images.original?.url ?? '/placeholder-jewelry.svg';
+  const g = p.images.generated?.product ?? p.images.generated?.lifestyle;
+  return g?.thumbUrl ?? g?.url ?? p.images.original?.url ?? '/placeholder-jewelry.svg';
 }
 
 const price = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2, minimumFractionDigits: 0 });

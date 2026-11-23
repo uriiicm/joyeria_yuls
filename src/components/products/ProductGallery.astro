@@ -1,12 +1,14 @@
 ---
-import { FALLBACK_IMAGE, imageSrcSet, optimizedImage } from '../../lib/utils/images';
+import { FALLBACK_IMAGE } from '../../lib/utils/images';
 
 interface Props {
   images: string[];
+  thumbnails?: string[];
   alt: string;
 }
-const { images, alt } = Astro.props;
+const { images, thumbnails = [], alt } = Astro.props;
 const list = images.length ? images : [FALLBACK_IMAGE];
+const thumbs = list.map((src, i) => thumbnails[i] ?? src);
 ---
 
 <div class="gallery" data-gallery>
@@ -15,15 +17,13 @@ const list = images.length ? images : [FALLBACK_IMAGE];
       list.map((src, i) => (
         <figure class="gallery__slide">
           <img
-            src={src === FALLBACK_IMAGE ? src : optimizedImage(src, 1200)}
-            srcset={src === FALLBACK_IMAGE ? undefined : imageSrcSet(src)}
-            sizes="(min-width: 900px) 55vw, 100vw"
+            src={src}
             alt={`${alt} — fotografía ${i + 1}`}
             loading={i === 0 ? 'eager' : 'lazy'}
             fetchpriority={i === 0 ? 'high' : 'auto'}
             width="1200"
             height="1200"
-            onerror="this.onerror=null;this.removeAttribute('srcset');this.src='/placeholder-jewelry.svg'"
+            onerror="this.onerror=null;this.src='/placeholder-jewelry.svg'"
           />
         </figure>
       ))
@@ -32,9 +32,9 @@ const list = images.length ? images : [FALLBACK_IMAGE];
   {
     list.length > 1 && (
       <div class="gallery__thumbs" role="tablist" aria-label="Fotografías">
-        {list.map((src, i) => (
+        {thumbs.map((src, i) => (
           <button type="button" class="gallery__thumb" data-thumb={i} aria-label={`Ver fotografía ${i + 1}`} aria-current={i === 0 ? 'true' : undefined}>
-            <img src={optimizedImage(src, 400)} alt="" loading="lazy" width="120" height="120" />
+            <img src={src} alt="" loading="lazy" width="120" height="120" />
           </button>
         ))}
       </div>

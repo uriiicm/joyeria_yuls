@@ -3,7 +3,8 @@
 // consulta su estado y, cuando terminan, copia los resultados a R2.
 import { adminDb } from '../firebase/firebase-admin.service';
 import { getProduct, patchProduct } from '../products/product.service';
-import { deleteObject, productImageKey, publicUrl, putObject, sniffImageType } from '../storage/r2.service';
+import { deleteObject, productImageKey, publicUrl, putObject, sniffImageType, thumbKeyFor } from '../storage/r2.service';
+import { optimizeForCatalog } from '../storage/image-optimizer.service';
 import { ApiError } from '../../lib/http';
 import {
   GENERATED_IMAGE_TYPES,
@@ -133,14 +134,29 @@ export async function refreshGeneration(productId: string): Promise<Product> {
       if (status.status === 'completed') {
         if (!status.imageUrl) throw new Error('Higgsfield no devolvió ninguna imagen.');
         const bytes = await downloadResult(status.imageUrl);
-        const contentType = sniffImageType(bytes);
-        if (!contentType) throw new Error('El archivo generado no es una imagen válida.');
-        const key = productImageKey(product.id, 'generated', type, contentType);
-        await putObject(key, bytes, contentType);
+        if (!sniffImageType(bytes)) throw new Error('El archivo generado no es una imagen válida.');
+        // Se guarda en WebP optimizado (grande + miniatura), no el PNG pesado original.
+        const optimized = await optimizeForCatalog(bytes);
+        const key = productImageKey(product.id, 'generated', type, 'image/webp');
+        const thumbKey = thumbKeyFor(key);
+        await putObject(key, optimized.full.bytes, 'image/webp');
+        await putObject(thumbKey, optimized.thumb.bytes, 'image/webp');
 
-        const image: GeneratedImage = { key, url: publicUrl(key), contentType, type, model: job.model, createdAt: Date.now() };
+        const image: GeneratedImage = {
+          key,
+          url: publicUrl(key),
+          thumbKey,
+          thumbUrl: publicUrl(thumbKey),
+          width: optimized.full.width,
+          height: optimized.full.height,
+          contentType: 'image/webp',
+          type,
+          model: job.model,
+          createdAt: Date.now(),
+        };
         const previous = product.images.generated?.[type];
         if (previous?.key) oldKeys.push(previous.key);
+        if (previous?.thumbKey) oldKeys.push(previous.thumbKey);
         updates[`images/generated/${type}`] = image;
         jobs[type] = { ...job, status: 'completed', completedAt: Date.now(), error: null };
       } else if (TERMINAL.includes(status.status)) {

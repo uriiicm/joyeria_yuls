@@ -36,6 +36,9 @@ export function productImageKey(productId: string, folder: 'original' | 'generat
   return `products/${productId}/${folder}/${name}-${Date.now()}.${EXT[type]}`;
 }
 
+/** Clave de la miniatura asociada a una imagen (mismo nombre con sufijo -thumb). */
+export const thumbKeyFor = (key: string) => key.replace(/(\.[a-z]+)$/, '-thumb$1');
+
 /** URL firmada de corta duración para que el navegador suba un único archivo. */
 export async function createUploadUrl(key: string, contentType: AllowedImageType): Promise<string> {
   return getSignedUrl(s3(), new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: contentType }), {
