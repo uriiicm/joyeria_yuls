@@ -56,9 +56,26 @@ export async function getProduct(id: string): Promise<Product> {
   return normalize(snap.val() as Product);
 }
 
-/** RTDB no guarda listas vacías: se restauran para trabajar con tipos completos. */
+/**
+ * Realtime Database elimina los campos `null` y las listas vacías al guardar.
+ * Al leer se restauran sus valores por defecto para no propagar `undefined`
+ * (Firebase rechaza escribir `undefined`, p. ej. al copiar al catálogo).
+ */
 function normalize(p: Product): Product {
-  return { ...p, colors: p.colors ?? [], features: p.features ?? [], images: p.images ?? { original: null } };
+  return {
+    ...p,
+    name: p.name ?? '',
+    description: p.description ?? '',
+    apparentMaterial: p.apparentMaterial ?? '',
+    colors: p.colors ?? [],
+    stone: p.stone ?? null,
+    style: p.style ?? '',
+    shape: p.shape ?? '',
+    features: p.features ?? [],
+    price: p.price ?? null,
+    publishedAt: p.publishedAt ?? null,
+    images: { original: p.images?.original ?? null, ...(p.images?.generated ? { generated: p.images.generated } : {}) },
+  };
 }
 
 /** Escribe campos con rutas relativas (multi-path update) y sincroniza el catálogo. */
@@ -123,12 +140,12 @@ function toCatalogItem(p: Product): CatalogItem {
     name: p.name,
     category: p.category,
     price: p.price ?? 0,
-    description: p.description,
-    apparentMaterial: p.apparentMaterial,
-    colors: p.colors,
-    stone: p.stone,
-    style: p.style,
-    features: p.features,
+    description: p.description ?? '',
+    apparentMaterial: p.apparentMaterial ?? '',
+    colors: p.colors ?? [],
+    stone: p.stone ?? null,
+    style: p.style ?? '',
+    features: p.features ?? [],
     availability: p.availability,
     images: catalogImages(p),
     thumbnails: catalogThumbnails(p),

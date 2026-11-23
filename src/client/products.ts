@@ -4,16 +4,29 @@ import { clientDb } from '../services/firebase/firebase-client.service';
 import type { Product } from '../types/product';
 import { escapeHtml } from './ui';
 
+/** Firebase elimina campos `null` y listas vacías: se restauran sus valores por defecto. */
+function normalizeProduct(p: Product): Product {
+  return {
+    ...p,
+    name: p.name ?? '',
+    description: p.description ?? '',
+    apparentMaterial: p.apparentMaterial ?? '',
+    colors: p.colors ?? [],
+    stone: p.stone ?? null,
+    style: p.style ?? '',
+    shape: p.shape ?? '',
+    features: p.features ?? [],
+    price: p.price ?? null,
+    images: p.images ?? { original: null },
+    ai: p.ai ?? { analysisStatus: 'pending', generationStatus: 'idle' },
+  };
+}
+
 export function subscribeProducts(cb: (products: Product[]) => void, onError: (e: Error) => void) {
   return onValue(
     ref(clientDb, 'products'),
     (snap) => {
-      const list = Object.values((snap.val() ?? {}) as Record<string, Product>).map((p) => ({
-        ...p,
-        colors: p.colors ?? [],
-        features: p.features ?? [],
-        images: p.images ?? { original: null },
-      }));
+      const list = Object.values((snap.val() ?? {}) as Record<string, Product>).map(normalizeProduct);
       cb(list.sort((a, b) => b.createdAt - a.createdAt));
     },
     onError,
@@ -25,7 +38,7 @@ export function subscribeProduct(id: string, cb: (p: Product | null) => void, on
     ref(clientDb, `products/${id}`),
     (snap) => {
       const p = snap.val() as Product | null;
-      cb(p ? { ...p, colors: p.colors ?? [], features: p.features ?? [], images: p.images ?? { original: null } } : null);
+      cb(p ? normalizeProduct(p) : null);
     },
     onError,
   );

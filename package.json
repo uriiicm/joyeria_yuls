@@ -16,7 +16,8 @@
     "deploy:rules": "npx -y firebase-tools@latest deploy --only database",
     "test:gemini": "node --env-file=.env scripts/test-gemini.mjs",
     "start": "node ./dist/server/entry.mjs",
-    "images:optimize": "node --env-file=.env scripts/optimize-generated-images.mjs"
+    "images:optimize": "node --env-file=.env scripts/optimize-generated-images.mjs",
+    "catalog:resync": "node --env-file=.env scripts/resync-catalog.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^11.1.14",
