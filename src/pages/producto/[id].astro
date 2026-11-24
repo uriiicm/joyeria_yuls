@@ -8,7 +8,7 @@ import { AVAILABILITY_LABEL, formatPrice } from '../../lib/utils/format';
 import { whatsappLink } from '../../lib/utils/whatsapp';
 import Icon from '../../components/ui/Icon.astro';
 import AddedToCartModal from '../../components/catalog/AddedToCartModal.astro';
-import { PUBLIC_CURRENCY, PUBLIC_FREE_SHIPPING_MIN, PUBLIC_STORE_NAME } from 'astro:env/client';
+import { PUBLIC_CURRENCY, PUBLIC_FREE_SHIPPING_MIN, PUBLIC_SITE_URL, PUBLIC_STORE_NAME } from 'astro:env/client';
 
 export const prerender = false;
 
@@ -27,7 +27,8 @@ const cartItem = {
   name: item.name,
   price: item.price,
   image: item.thumbnails?.[0] ?? item.images[0] ?? '/placeholder-jewelry.svg',
-  url: new URL(`/producto/${item.id}`, Astro.url.origin).href,
+  // Detrás del proxy de Render, Astro.url apunta a localhost: se usa el dominio público.
+  url: new URL(`/producto/${item.id}`, PUBLIC_SITE_URL ?? Astro.url.origin).href,
 };
 const details = [
   ['Categoría', item.category],

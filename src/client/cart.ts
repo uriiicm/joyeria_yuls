@@ -91,9 +91,13 @@ export const missingForFreeShipping = (items = currentCart()) =>
   FREE_SHIPPING_MIN > 0 ? Math.max(0, FREE_SHIPPING_MIN - cartTotal(items)) : 0;
 
 /** Mensaje de pedido listo para que el cliente solo toque "Enviar" en WhatsApp. */
+/** Enlace de la joya con el dominio desde el que el cliente está comprando. */
+const productUrl = (item: CartItem) =>
+  typeof window !== 'undefined' ? `${window.location.origin}/producto/${encodeURIComponent(item.id)}` : item.url;
+
 export function orderMessage(items = currentCart()): string {
   const total = cartTotal(items);
-  const lines = items.map((i, n) => `${n + 1}. ${i.name}\n   Código: ${i.code}\n   Precio: ${formatMoney(i.price)}\n   ${i.url}`);
+  const lines = items.map((i, n) => `${n + 1}. ${i.name}\n   Código: ${i.code}\n   Precio: ${formatMoney(i.price)}\n   ${productUrl(i)}`);
   const shipping =
     FREE_SHIPPING_MIN > 0 && total >= FREE_SHIPPING_MIN ? [`✓ Mi pedido supera ${formatMoney(FREE_SHIPPING_MIN)}: aplica envío gratis.`, ''] : [];
   return [
