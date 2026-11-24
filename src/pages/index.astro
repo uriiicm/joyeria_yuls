@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import SiteHeader from '../components/ui/SiteHeader.astro';
 import SiteFooter from '../components/ui/SiteFooter.astro';
 import ProductCard from '../components/catalog/ProductCard.astro';
+import HeroVideo from '../components/catalog/HeroVideo.astro';
 import { listCatalog } from '../services/products/catalog.service';
 import { CATEGORIES, type CatalogItem } from '../types/product';
 import { PUBLIC_STORE_NAME, PUBLIC_STORE_TAGLINE } from 'astro:env/client';
@@ -18,7 +19,7 @@ try {
   loadError = true;
 }
 
-// La CDN de Vercel sirve una copia por 60 s y la renueva en segundo plano.
+// Permite a una CDN (si hay) servir una copia por 60 s y renovarla en segundo plano.
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=600');
 
 const presentCategories = CATEGORIES.filter((c) => items.some((i) => i.category === c));
@@ -26,17 +27,11 @@ const description = `${PUBLIC_STORE_TAGLINE}. Descubre el catálogo de ${PUBLIC_
 ---
 
 <BaseLayout description={description} image={items[0]?.images[0]}>
+  <link slot="head" rel="preload" as="image" href="/hero-poster.webp" fetchpriority="high" />
   <SiteHeader />
 
   <main>
-    <section class="hero">
-      <div class="container hero__inner">
-        <p class="eyebrow">Colección</p>
-        <h1 class="hero__title"><img src="/logo.webp" alt={PUBLIC_STORE_NAME} width="900" height="262" fetchpriority="high" /></h1>
-        <p class="hero__text">{PUBLIC_STORE_TAGLINE}. Cada pieza se elige con cuidado; consulta disponibilidad y detalles directamente por WhatsApp.</p>
-        <a class="btn btn--rose" href="#catalogo">Ver catálogo</a>
-      </div>
-    </section>
+    <HeroVideo />
 
     <section id="catalogo" class="container catalog">
       <form class="filters" role="search" data-filters onsubmit="return false">
@@ -141,31 +136,6 @@ const description = `${PUBLIC_STORE_TAGLINE}. Descubre el catálogo de ${PUBLIC_
 </script>
 
 <style>
-  .hero {
-    background:
-      radial-gradient(120% 80% at 85% 0%, var(--rose-100) 0%, transparent 60%),
-      radial-gradient(90% 70% at 0% 100%, var(--beige-100) 0%, transparent 60%);
-    border-bottom: 1px solid var(--line);
-  }
-  .hero__inner {
-    display: grid;
-    justify-items: center;
-    text-align: center;
-    gap: 1rem;
-    padding-block: clamp(3.5rem, 10vw, 7rem);
-  }
-  .hero__title img {
-    width: min(560px, 86vw);
-    height: auto;
-    margin-block: 0.25rem 0.5rem;
-  }
-  .hero__text {
-    max-width: 52ch;
-    color: var(--ink-soft);
-    font-weight: 300;
-    font-size: 1.05rem;
-    margin-bottom: 0.5rem;
-  }
   .catalog {
     padding-top: 2.5rem;
   }

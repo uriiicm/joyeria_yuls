@@ -1,0 +1,279 @@
+---
+// Banner principal: video de fondo a pantalla completa (sin controles, en bucle y sin
+// sonido) con un degradado para que el texto se lea sin tapar la joyería.
+import { PUBLIC_HERO_VIDEO_URL, PUBLIC_STORE_NAME, PUBLIC_STORE_TAGLINE } from 'astro:env/client';
+import { whatsappContactLink } from '../../lib/utils/whatsapp';
+
+const POSTER = '/hero-poster.webp';
+const wa = whatsappContactLink();
+---
+
+<section class="hero" aria-label={PUBLIC_STORE_NAME}>
+  <div class="hero__media" aria-hidden="true">
+    <img class="hero__poster" src={POSTER} alt="" width="1280" height="720" fetchpriority="high" decoding="async" />
+    {
+      PUBLIC_HERO_VIDEO_URL && (
+        <video
+          class="hero__video"
+          data-hero-video
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+          poster={POSTER}
+          disablepictureinpicture
+          disableRemotePlayback
+          tabindex="-1"
+        >
+          <source src={PUBLIC_HERO_VIDEO_URL} type="video/mp4" />
+        </video>
+      )
+    }
+    <div class="hero__shade"></div>
+  </div>
+
+  <div class="hero__content container">
+    <p class="hero__eyebrow">Joyería fina · Piezas únicas</p>
+    <h1 class="hero__title">
+      <img src="/logo.webp" alt={PUBLIC_STORE_NAME} width="900" height="262" />
+    </h1>
+    <p class="hero__text">{PUBLIC_STORE_TAGLINE}. Cada pieza es única y se elige con cuidado.</p>
+    <div class="hero__actions">
+      <a class="hero__btn hero__btn--solid" href="#catalogo">Ver colección</a>
+      {wa && <a class="hero__btn hero__btn--ghost" href={wa} target="_blank" rel="noopener">Contáctanos</a>}
+    </div>
+  </div>
+
+  <a class="hero__scroll" href="#catalogo" aria-label="Ir al catálogo">
+    <span></span>
+  </a>
+</section>
+
+<script>
+  const video = document.querySelector<HTMLVideoElement>('[data-hero-video]');
+  if (video) {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    // Refuerza el silencio (iOS exige muted para la reproducción automática).
+    video.muted = true;
+    video.defaultMuted = true;
+    const sync = () => {
+      if (reduce.matches) {
+        video.pause();
+        return;
+      }
+      video.play().catch(() => {
+        // Ahorro de batería o datos: se queda la imagen fija del primer fotograma.
+      });
+    };
+    video.addEventListener('playing', () => video.classList.add('is-playing'), { once: true });
+    reduce.addEventListener?.('change', sync);
+    // Pausa cuando el banner no está a la vista para ahorrar batería.
+    new IntersectionObserver(([entry]) => (entry?.isIntersecting ? sync() : video.pause()), { threshold: 0.05 }).observe(video);
+  }
+</script>
+
+<style>
+  .hero {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    align-items: end;
+    min-height: min(calc(100svh - 64px), 860px);
+    overflow: hidden;
+    background: #2b2420;
+    color: #fff;
+  }
+  @media (max-width: 640px) {
+    .hero {
+      min-height: calc(100svh - 64px);
+    }
+  }
+  .hero__media,
+  .hero__poster,
+  .hero__video,
+  .hero__shade {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .hero__media {
+    z-index: -1;
+  }
+  .hero__poster,
+  .hero__video {
+    object-fit: cover;
+    /* El sujeto está centrado: se conserva rostro y collar al recortar. */
+    object-position: 50% 30%;
+  }
+  .hero__video {
+    opacity: 0;
+    transition: opacity 1.2s var(--ease);
+  }
+  .hero__video:global(.is-playing) {
+    opacity: 1;
+  }
+  .hero__shade {
+    background:
+      linear-gradient(180deg, rgb(20 15 12 / 0.28) 0%, rgb(20 15 12 / 0) 28%),
+      linear-gradient(0deg, rgb(20 15 12 / 0.82) 0%, rgb(20 15 12 / 0.45) 32%, rgb(20 15 12 / 0) 62%);
+  }
+  .hero__content {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 0.9rem;
+    padding-block: 0 clamp(4.5rem, 11vh, 7rem);
+    animation: hero-in 1.2s var(--ease) 0.2s both;
+  }
+  .hero__eyebrow {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+    color: #ecd9b0;
+    padding-left: 0.36em;
+    text-shadow: 0 1px 10px rgb(0 0 0 / 0.45);
+  }
+  .hero__title {
+    margin: 0;
+  }
+  .hero__title img {
+    width: min(460px, 78vw);
+    height: auto;
+    filter: drop-shadow(0 2px 18px rgb(0 0 0 / 0.35)) brightness(1.15);
+  }
+  .hero__text {
+    max-width: 44ch;
+    font-weight: 300;
+    font-size: clamp(0.98rem, 2.6vw, 1.1rem);
+    letter-spacing: 0.02em;
+    color: rgb(255 250 244 / 0.9);
+  }
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+  }
+  .hero__btn {
+    min-width: 168px;
+    padding: 0.95rem 1.6rem;
+    font-size: 0.74rem;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    border-radius: 0;
+    transition:
+      background 0.3s var(--ease),
+      color 0.3s var(--ease),
+      border-color 0.3s var(--ease);
+  }
+  .hero__btn--solid {
+    background: var(--white-warm);
+    color: var(--ink);
+    border: 1px solid var(--white-warm);
+  }
+  .hero__btn--solid:hover {
+    background: var(--gold-soft);
+    border-color: var(--gold-soft);
+  }
+  .hero__btn--ghost {
+    color: #fff;
+    border: 1px solid rgb(255 255 255 / 0.6);
+  }
+  .hero__btn--ghost:hover {
+    background: rgb(255 255 255 / 0.12);
+    border-color: #fff;
+  }
+  .hero__scroll {
+    position: absolute;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+    width: 22px;
+    height: 36px;
+    border: 1px solid rgb(255 255 255 / 0.55);
+    border-radius: 999px;
+  }
+  .hero__scroll span {
+    position: absolute;
+    left: 50%;
+    top: 7px;
+    width: 2px;
+    height: 7px;
+    margin-left: -1px;
+    border-radius: 2px;
+    background: #fff;
+    animation: hero-scroll 1.8s var(--ease) infinite;
+  }
+  @keyframes hero-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+  }
+  @keyframes hero-scroll {
+    0% {
+      opacity: 0;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  /* Celular: más contraste abajo y botones lado a lado. */
+  @media (max-width: 899px) {
+    .hero__shade {
+      background:
+        linear-gradient(180deg, rgb(20 15 12 / 0.25) 0%, rgb(20 15 12 / 0) 22%),
+        linear-gradient(0deg, rgb(20 15 12 / 0.9) 0%, rgb(20 15 12 / 0.62) 34%, rgb(20 15 12 / 0) 60%);
+    }
+    .hero__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: min(100%, 360px);
+    }
+    .hero__btn {
+      min-width: 0;
+      padding-inline: 0.75rem;
+      text-align: center;
+    }
+  }
+  /* Escritorio: texto a la izquierda para dejar a la vista a la modelo y sus joyas. */
+  @media (min-width: 900px) {
+    .hero {
+      align-items: center;
+    }
+    .hero__shade {
+      background:
+        linear-gradient(90deg, rgb(20 15 12 / 0.78) 0%, rgb(20 15 12 / 0.5) 26%, rgb(20 15 12 / 0) 52%),
+        linear-gradient(0deg, rgb(20 15 12 / 0.35) 0%, rgb(20 15 12 / 0) 30%);
+    }
+    .hero__content {
+      justify-items: start;
+      text-align: left;
+      padding-block: 0;
+      max-width: var(--maxw);
+    }
+    .hero__content > * {
+      max-width: 400px;
+    }
+    .hero__eyebrow {
+      padding-left: 0;
+    }
+    .hero__title img {
+      width: 400px;
+    }
+    .hero__actions {
+      justify-content: flex-start;
+    }
+  }
+</style>
