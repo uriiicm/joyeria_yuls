@@ -25,6 +25,12 @@ export default defineConfig({
       // Monto mínimo del pedido para envío gratis (0 desactiva el aviso).
       PUBLIC_FREE_SHIPPING_MIN: envField.number({ context: 'client', access: 'public', default: 500 }),
       PUBLIC_SITE_URL: envField.string({ context: 'client', access: 'public', optional: true, url: true }),
+      // Video del banner principal (MP4, sin sonido). Vacío = solo imagen.
+      PUBLIC_HERO_VIDEO_URL: envField.string({
+        context: 'client',
+        access: 'public',
+        default: 'https://pub-2ab10bb546734b0eba2646555e5da09e.r2.dev/video/playground-result-1795461109001.mp4',
+      }),
 
       FIREBASE_SERVICE_ACCOUNT_BASE64: envField.string({ context: 'server', access: 'secret' }),
       ADMIN_UIDS: envField.string({ context: 'server', access: 'secret' }),
