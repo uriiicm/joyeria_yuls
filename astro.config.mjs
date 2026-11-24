@@ -29,7 +29,7 @@ export default defineConfig({
       PUBLIC_HERO_VIDEO_URL: envField.string({
         context: 'client',
         access: 'public',
-        default: 'https://pub-2ab10bb546734b0eba2646555e5da09e.r2.dev/video/playground-result-1795461109001.mp4',
+        default: 'https://pub-2ab10bb546734b0eba2646555e5da09e.r2.dev/video/YULIVIDEORecor.mp4',
       }),
 
       FIREBASE_SERVICE_ACCOUNT_BASE64: envField.string({ context: 'server', access: 'secret' }),
