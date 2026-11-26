@@ -179,7 +179,7 @@ curl "$PUBLIC_FIREBASE_DATABASE_URL/catalog.json"    # → datos públicos o nul
 
 ## 5. Gemini
 
-- Variables: `GEMINI_API_KEY` y `GEMINI_MODEL` (por defecto `gemini-3.6-flash`, estable). Puedes cambiarlo por otro modelo vigente de [la lista oficial](https://aistudio.google.com/docs/models) sin tocar código.
+- Variables: `GEMINI_API_KEY` y `GEMINI_MODEL` (por defecto `gemini-3.6-flash`, estable). Puedes cambiarlo por otro modelo vigente de [la lista oficial](https://aistudio.google.com/docs/models) sin tocar código. Si el principal está saturado, tarda más de 25 s o agotó su cuota diaria, el análisis usa `GEMINI_FALLBACK_MODEL` (por defecto `gemini-3.5-flash-lite`, responde en 1–2 s).
 - Llamada: `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` con el header `x-goog-api-key`, la imagen en `inlineData` y `responseMimeType: application/json` + `responseJsonSchema`.
 - El prompt de sistema prohíbe afirmar materiales, quilataje, pureza, autenticidad, piedras naturales o preciosas y marcas. Además, `sanitize()` valida tipos y longitudes de la respuesta.
 - La sugerencia se guarda en `ai/analysis` y solo **rellena campos vacíos**. Nunca pisa lo que la administradora ya editó, y nada se publica sin que ella lo guarde.

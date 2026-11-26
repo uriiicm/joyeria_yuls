@@ -1,10 +1,12 @@
 // Análisis visual de joyería con Gemini (endpoint REST generateContent, solo servidor).
-import { GEMINI_API_KEY, GEMINI_MODEL } from 'astro:env/server';
+import { GEMINI_API_KEY, GEMINI_FALLBACK_MODEL, GEMINI_MODEL } from 'astro:env/server';
 import { ApiError } from '../../lib/http';
 import { CATEGORIES, type Category, type JewelryAnalysis } from '../../types/product';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
-const TIMEOUT_MS = 45_000;
+// El principal tiene poco margen: si se satura, el de respaldo responde en segundos.
+const PRIMARY_TIMEOUT_MS = 25_000;
+const FALLBACK_TIMEOUT_MS = 40_000;
 
 const SYSTEM_INSTRUCTION = `Eres una asistente de catalogación para una boutique de joyería de fantasía y bisutería fina.
 Analizas UNA fotografía y describes únicamente lo que se ve. Respondes en español de México.
@@ -68,7 +70,7 @@ export async function analyzeJewelryImage(image: { bytes: Uint8Array; contentTyp
     },
   };
 
-  const { res, data } = await callWithRetry(JSON.stringify(body));
+  const { res, data, model } = await callWithFallback(JSON.stringify(body));
   if (!res.ok) {
     console.error('[gemini]', res.status, data.error);
     if (res.status === 429) throw new ApiError(429, 'Gemini alcanzó su límite de uso. Espera un momento e intenta de nuevo.');
@@ -85,32 +87,47 @@ export async function analyzeJewelryImage(image: { bytes: Uint8Array; contentTyp
   } catch {
     throw new ApiError(502, 'Gemini devolvió una respuesta que no es JSON válido.');
   }
-  return { analysis: sanitize(raw), model: data.modelVersion ?? GEMINI_MODEL };
+  return { analysis: sanitize(raw), model: data.modelVersion ?? model };
 }
 
-const RETRY_DELAYS_MS = [1500, 4000];
+type Call = { res: Response; data: GeminiResponse; model: string };
 
-/** Reintenta saturaciones temporales de Google (429/500/503) hasta 2 veces con espera progresiva. */
-async function callWithRetry(body: string): Promise<{ res: Response; data: GeminiResponse }> {
-  for (let attempt = 0; ; attempt++) {
-    let res: Response;
-    try {
-      res = await fetch(`${ENDPOINT}/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
-        body,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch (err) {
-      const timeout = (err as Error).name === 'TimeoutError';
-      throw new ApiError(504, timeout ? 'Gemini tardó demasiado en responder. Intenta de nuevo.' : 'No se pudo conectar con Gemini.');
-    }
-    const data = (await res.json().catch(() => ({}))) as GeminiResponse;
-    const transient = res.status === 429 || res.status === 500 || res.status === 503;
-    if (!transient || attempt >= RETRY_DELAYS_MS.length) return { res, data };
-    console.warn(`[gemini] ${res.status}, reintento ${attempt + 1}`);
-    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]! + Math.random() * 500));
+/** Saturación, cuota agotada o falla temporal de Google: vale la pena otro modelo. */
+const isTransient = (status: number) => status === 429 || status === 500 || status === 503;
+
+/** Intenta el modelo principal; si se satura, tarda o agotó la cuota, usa el de respaldo. */
+async function callWithFallback(body: string): Promise<Call> {
+  const fallback = GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_MODEL ? GEMINI_FALLBACK_MODEL : null;
+  try {
+    const primary = await call(GEMINI_MODEL, body, PRIMARY_TIMEOUT_MS);
+    if (!fallback || !isTransient(primary.res.status)) return primary;
+    console.warn(`[gemini] ${GEMINI_MODEL} respondió ${primary.res.status}; uso ${fallback}`);
+  } catch (err) {
+    if (!fallback) throw err;
+    console.warn(`[gemini] ${GEMINI_MODEL} falló (${(err as Error).message}); uso ${fallback}`);
   }
+  const second = await call(fallback, body, FALLBACK_TIMEOUT_MS);
+  if (!isTransient(second.res.status)) return second;
+  // Un reintento breve del respaldo antes de rendirse.
+  await new Promise((r) => setTimeout(r, 1500 + Math.random() * 500));
+  return call(fallback, body, FALLBACK_TIMEOUT_MS);
+}
+
+async function call(model: string, body: string, timeoutMs: number): Promise<Call> {
+  let res: Response;
+  try {
+    res = await fetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY! },
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const timeout = (err as Error).name === 'TimeoutError';
+    throw new ApiError(504, timeout ? 'Gemini tardó demasiado en responder. Intenta de nuevo.' : 'No se pudo conectar con Gemini.');
+  }
+  const data = (await res.json().catch(() => ({}))) as GeminiResponse;
+  return { res, data, model };
 }
 
 /** Defensa extra: valida tipos y limpia términos que las reglas prohíben afirmar. */
