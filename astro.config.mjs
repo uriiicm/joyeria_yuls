@@ -43,6 +43,8 @@ export default defineConfig({
 
       GEMINI_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
       GEMINI_MODEL: envField.string({ context: 'server', access: 'secret', default: 'gemini-3.6-flash' }),
+      // Modelo rápido de respaldo si el principal está saturado, tarda o agotó su cuota.
+      GEMINI_FALLBACK_MODEL: envField.string({ context: 'server', access: 'secret', default: 'gemini-3.5-flash-lite' }),
 
       // Formato "<key-id>:<key-secret>", tal como lo muestra Higgsfield Console.
       HIGGSFIELD_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),

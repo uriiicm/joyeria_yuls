@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/components/catalog/AddedToCartModal.astro"
+        ],
+        "createdAt": "2026-11-26T21:57:14.686Z",
+        "reason": "Claude: img src is assigned at runtime by the page script (cart modal photo / admin photo previews); tags are hidden or filled before display"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/pages/admin/products/edit.astro"
+        ],
+        "createdAt": "2026-11-26T21:57:14.709Z",
+        "reason": "Claude: img src is assigned at runtime by the page script (cart modal photo / admin photo previews); tags are hidden or filled before display"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/pages/admin/products/new.astro"
+        ],
+        "createdAt": "2026-11-26T21:57:14.734Z",
+        "reason": "Claude: img src is assigned at runtime by the page script (cart modal photo / admin photo previews); tags are hidden or filled before display"
+      }
+    ]
+  }
+}
